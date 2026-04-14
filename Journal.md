@@ -118,4 +118,24 @@ All files in `Shared/` at project root — must be manually added to both target
 
 ---
 
+## Entry 2 — watchOS Build Fix (`.onAppear` on `WindowGroup`)
+
+**Problem:**
+Build error in `Boxed_Up_WatchApp.swift`:
+> `value of type 'WindowGroup<_ConditionalContent<WatchGameView, WatchHomeView>>' has no member 'onAppear'`
+
+**Root Cause:**
+`.onAppear` is a `View` modifier, but `WindowGroup` is a `Scene`. Attaching `.onAppear` directly to `WindowGroup` is invalid.
+
+**Fix:**
+Wrapped the conditional view content inside a `Group` view and moved `.onAppear` onto the `Group` instead of the `WindowGroup`.
+
+**File changed:**
+- `Boxed Up Watch Watch App/Boxed_Up_WatchApp.swift`
+
+**Result:**
+Both targets (`Boxed Up` iOS and `Boxed Up Watch Watch App` watchOS) build successfully via `xcodebuild`.
+
+---
+
 *End of journal. Update this file after every implementation session.*

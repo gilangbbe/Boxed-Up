@@ -20,14 +20,16 @@ struct Boxed_Up_Watch_Watch_AppApp: App {
 
     var body: some Scene {
         WindowGroup {
-            if isRoundActive {
-                WatchGameView(currentAction: currentAction, lastPunchCorrect: lastPunchCorrect)
-            } else {
-                WatchHomeView(sessionManager: sessionManager)
+            Group {
+                if isRoundActive {
+                    WatchGameView(currentAction: currentAction, lastPunchCorrect: lastPunchCorrect)
+                } else {
+                    WatchHomeView(sessionManager: sessionManager)
+                }
+            } 
+            .onAppear {
+                setupWatch()
             }
-        }
-        .onAppear {
-            setupWatch()
         }
     }
 

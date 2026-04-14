@@ -6,10 +6,6 @@
 	objectVersion = 77;
 	objects = {
 
-/* Begin PBXBuildFile section */
-		4EC718FD2F8CF3B600C3D2C8 /* Boxed Up Watch Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 4EC718F32F8CF3B500C3D2C8 /* Boxed Up Watch Watch App.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-/* End PBXBuildFile section */
-
 /* Begin PBXContainerItemProxy section */
 		4EC718FB2F8CF3B600C3D2C8 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -27,7 +23,6 @@
 			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
 			dstSubfolderSpec = 16;
 			files = (
-				4EC718FD2F8CF3B600C3D2C8 /* Boxed Up Watch Watch App.app in Embed Watch Content */,
 			);
 			name = "Embed Watch Content";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -35,8 +30,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		4EC718E12F8CE5A400C3D2C8 /* Boxed Up.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Boxed Up.app"; sourceTree = BUILT_PRODUCTS_DIR; };
-		4EC718F32F8CF3B500C3D2C8 /* Boxed Up Watch Watch App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Boxed Up Watch Watch App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		4EC718E12F8CE5A400C3D2C8 /* Boxed Up.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = "Boxed Up.app"; path = "/Users/biru/Work/LearningDevelopment/Boxed Up/build/Debug-iphoneos/Boxed Up.app"; sourceTree = "<absolute>"; };
+		4EC719592F8CF76300C3D2C8 /* Boxed Up Watch Watch App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Boxed Up Watch Watch App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -48,6 +43,11 @@
 		4EC718F42F8CF3B500C3D2C8 /* Boxed Up Watch Watch App */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = "Boxed Up Watch Watch App";
+			sourceTree = "<group>";
+		};
+		4EC719462F8CF72400C3D2C8 /* Shared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Shared;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -75,17 +75,9 @@
 			children = (
 				4EC718E32F8CE5A400C3D2C8 /* Boxed Up */,
 				4EC718F42F8CF3B500C3D2C8 /* Boxed Up Watch Watch App */,
-				4EC718E22F8CE5A400C3D2C8 /* Products */,
+				4EC719462F8CF72400C3D2C8 /* Shared */,
+				4EC719592F8CF76300C3D2C8 /* Boxed Up Watch Watch App.app */,
 			);
-			sourceTree = "<group>";
-		};
-		4EC718E22F8CE5A400C3D2C8 /* Products */ = {
-			isa = PBXGroup;
-			children = (
-				4EC718E12F8CE5A400C3D2C8 /* Boxed Up.app */,
-				4EC718F32F8CF3B500C3D2C8 /* Boxed Up Watch Watch App.app */,
-			);
-			name = Products;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -107,6 +99,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				4EC718E32F8CE5A400C3D2C8 /* Boxed Up */,
+				4EC719462F8CF72400C3D2C8 /* Shared */,
 			);
 			name = "Boxed Up";
 			packageProductDependencies = (
@@ -129,12 +122,13 @@
 			);
 			fileSystemSynchronizedGroups = (
 				4EC718F42F8CF3B500C3D2C8 /* Boxed Up Watch Watch App */,
+				4EC719462F8CF72400C3D2C8 /* Shared */,
 			);
 			name = "Boxed Up Watch Watch App";
 			packageProductDependencies = (
 			);
 			productName = "Boxed Up Watch Watch App";
-			productReference = 4EC718F32F8CF3B500C3D2C8 /* Boxed Up Watch Watch App.app */;
+			productReference = 4EC719592F8CF76300C3D2C8 /* Boxed Up Watch Watch App.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -165,7 +159,7 @@
 			mainGroup = 4EC718D82F8CE5A400C3D2C8;
 			minimizedProjectReferenceProxies = 1;
 			preferredProjectObjectVersion = 77;
-			productRefGroup = 4EC718E22F8CE5A400C3D2C8 /* Products */;
+			productRefGroup = 4EC718D82F8CE5A400C3D2C8;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -414,6 +408,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Boxed Up Watch";
+				INFOPLIST_KEY_NSMotionUsageDescription = "For detecting user motion";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = "com.biru.Boxed-Up";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -447,6 +442,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Boxed Up Watch";
+				INFOPLIST_KEY_NSMotionUsageDescription = "For detecting user motion";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = "com.biru.Boxed-Up";
 				LD_RUNPATH_SEARCH_PATHS = (
