@@ -123,7 +123,7 @@ class SparringViewModel {
 
     // MARK: - Private
 
-    private func setupMotionCallback() {
+    func setupMotionCallback() {
         sessionManager.onMotionData = { [weak self] samples in
             guard let self else { return }
             Task { @MainActor in

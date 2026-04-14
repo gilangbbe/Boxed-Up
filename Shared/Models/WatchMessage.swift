@@ -22,6 +22,8 @@ enum WatchMessage {
     case gameState(GameAction)
     case roundStart
     case roundEnd
+    case enterDataCollection
+    case exitDataCollection
 
     // MARK: - Dictionary Keys
     private enum Keys {
@@ -55,6 +57,10 @@ enum WatchMessage {
             return [Keys.type: "roundStart"]
         case .roundEnd:
             return [Keys.type: "roundEnd"]
+        case .enterDataCollection:
+            return [Keys.type: "enterDataCollection"]
+        case .exitDataCollection:
+            return [Keys.type: "exitDataCollection"]
         }
     }
 
@@ -89,6 +95,10 @@ enum WatchMessage {
             return .roundStart
         case "roundEnd":
             return .roundEnd
+        case "enterDataCollection":
+            return .enterDataCollection
+        case "exitDataCollection":
+            return .exitDataCollection
         default:
             return nil
         }

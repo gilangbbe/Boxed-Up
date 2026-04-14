@@ -9,6 +9,7 @@ import SwiftUI
 
 struct HomeView: View {
     @Bindable var viewModel: SparringViewModel
+    var onCollectData: () -> Void
 
     var body: some View {
         VStack(spacing: 30) {
@@ -48,6 +49,19 @@ struct HomeView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 16))
             }
             .disabled(!viewModel.sessionManager.isWatchReachable)
+            .padding(.horizontal)
+
+            Button {
+                onCollectData()
+            } label: {
+                Text("Collect Training Data")
+                    .font(.subheadline)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(.blue.opacity(0.1))
+                    .foregroundStyle(.blue)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+            }
             .padding(.horizontal)
 
             Spacer()

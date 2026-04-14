@@ -14,17 +14,22 @@ struct Boxed_Up_Watch_Watch_AppApp: App {
     @State private var motionManager = WatchMotionManager()
     @State private var motionStreamer: MotionStreamer?
 
-    @State private var isRoundActive = false
+    enum WatchAppMode { case home, game, dataCollection }
+    @State private var appMode: WatchAppMode = .home
     @State private var currentAction: GameAction?
     @State private var lastPunchCorrect: Bool?
+    @State private var isDataCollectionRecording = false
 
     var body: some Scene {
         WindowGroup {
             Group {
-                if isRoundActive {
-                    WatchGameView(currentAction: currentAction, lastPunchCorrect: lastPunchCorrect)
-                } else {
+                switch appMode {
+                case .home:
                     WatchHomeView(sessionManager: sessionManager)
+                case .game:
+                    WatchGameView(currentAction: currentAction, lastPunchCorrect: lastPunchCorrect)
+                case .dataCollection:
+                    WatchDataCollectionView(isRecording: isDataCollectionRecording)
                 }
             } 
             .onAppear {
@@ -55,6 +60,11 @@ struct Boxed_Up_Watch_Watch_AppApp: App {
                     streamer.flush()
                     sessionManager.send(.motionStopped)
                 }
+                // Update recording indicator for data collection mode
+                if appMode == .dataCollection {
+                    isDataCollectionRecording = start
+                    WKInterfaceDevice.current().play(start ? .start : .stop)
+                }
             }
         }
 
@@ -76,11 +86,19 @@ struct Boxed_Up_Watch_Watch_AppApp: App {
         // Handle round lifecycle
         sessionManager.onRoundLifecycle = { started in
             Task { @MainActor in
-                isRoundActive = started
+                appMode = started ? .game : .home
                 if !started {
                     currentAction = nil
                     lastPunchCorrect = nil
                 }
+            }
+        }
+
+        // Handle data collection mode
+        sessionManager.onDataCollectionMode = { active in
+            Task { @MainActor in
+                appMode = active ? .dataCollection : .home
+                isDataCollectionRecording = false
             }
         }
     }

@@ -23,6 +23,8 @@ class WatchSessionManager: NSObject {
     var onCaptureControl: ((Bool) -> Void)?
     /// Called when round starts/ends.
     var onRoundLifecycle: ((Bool) -> Void)?
+    /// Called when iPhone enters/exits data collection mode.
+    var onDataCollectionMode: ((Bool) -> Void)?
 
     private var session: WCSession {
         WCSession.default
@@ -76,6 +78,10 @@ extension WatchSessionManager: WCSessionDelegate {
             onRoundLifecycle?(true)
         case .roundEnd:
             onRoundLifecycle?(false)
+        case .enterDataCollection:
+            onDataCollectionMode?(true)
+        case .exitDataCollection:
+            onDataCollectionMode?(false)
         default:
             break
         }

@@ -232,19 +232,169 @@ Motion-controlled boxing reaction game. **Apple Watch** captures real punches vi
 
 ### 6.1 DataCollectionView (iPhone controls, Watch records)
 - **iPhone UI** (`DataCollectionView`):
-  - Pick punch type from segmented control (jab / hook / uppercut)
-  - "Record" button → sends `.startCapture` to Watch → Watch captures 3 seconds of motion
+  - Pick punch type from segmented control (jab / hook / uppercut / other)
+  - "Record" button → 3-2-1 countdown → sends `.startCapture` to Watch → Watch captures 3 seconds of motion
   - Watch streams raw motion data back to iPhone during recording
-  - iPhone saves labeled sessions to JSON files in app documents
-  - "Export" button → share sheet to AirDrop/Files for Create ML training
-  - Columns: timestamp, accX, accY, accZ, rotX, rotY, rotZ, label
+  - iPhone saves labeled sessions as individual CSV files organized in labeled directories:
+    ```
+    Documents/TrainingData/
+    ├── jab/
+    │   ├── session_20260414_143025_001.csv
+    │   └── ...
+    ├── hook/
+    │   └── ...
+    ├── uppercut/
+    │   └── ...
+    └── other/
+        └── ...
+    ```
+  - Each CSV file: `timestamp,accX,accY,accZ,rotX,rotY,rotZ`
+  - Session count tracker per label with color-coded progress (red < 20, orange < 50, green ≥ 50)
+  - "Export" button → consolidated CSV via share sheet (includes sessionId + label columns)
+  - "Delete All" button with confirmation
+  - Watch connection status indicator
 - **Watch UI** (`WatchDataCollectionView`):
-  - Minimal display: shows recording status ("Recording…" / "Done"), punch count
-  - Haptic tap on recording start/stop
-- This mode is crucial: quality of ML model depends on quantity + variety of training data
-- **Important**: Training data is from the Watch's wrist-mounted sensors — different motion signature than phone-in-hand
+  - Minimal display: shows recording status ("Recording…" / "Ready"), haptic tap on start/stop
+  - Watch enters data collection mode via new `.enterDataCollection` / `.exitDataCollection` WatchMessages
+- **Data format compatibility:**
+  - Individual CSVs in labeled directories → direct input for `MLActivityClassifier.DataSource.labeledDirectories(at:)`
+  - Consolidated export CSV → compatible with `MLDataTable` / `DataFrame` workflows
 
-**Files to create:** `iOS/Views/DataCollectionView.swift`, `iOS/ViewModels/DataCollectionViewModel.swift`, `watchOS/Views/WatchDataCollectionView.swift`
+### 6.2 Data Collection Requirements
+
+| Label | Purpose | Min Sessions | Recommended | Notes |
+|-------|---------|-------------|-------------|-------|
+| **Jab** | Punch classifier + detector (positive) | 50 | 100+ | Straight forward punch |
+| **Hook** | Punch classifier + detector (positive) | 50 | 100+ | Sweeping side punch |
+| **Uppercut** | Punch classifier + detector (positive) | 50 | 100+ | Upward rising punch |
+| **Other** | Detector only (negative class) | 50 | 100+ | Idle, walking, wrist adjustment, waving |
+
+**Best practices for quality data:**
+- Vary speed and intensity (light, medium, full power)
+- Include both standing and sitting positions
+- Record at different times (fresh vs fatigued)
+- Always wear Watch on the same wrist used during gameplay
+- For "other": include diverse non-punch movements (scrolling phone, drinking water, scratching, walking, clapping)
+- Recording duration: 3 seconds per session at 50 Hz = 150 samples
+
+**Files created:** `Shared/Models/DataCollectionLabel.swift`, `iOS/Views/DataCollectionView.swift`, `iOS/ViewModels/DataCollectionViewModel.swift`, `watchOS/Views/WatchDataCollectionView.swift`
+**Files modified:** `WatchMessage.swift` (added enterDataCollection/exitDataCollection), `Boxed_UpApp.swift`, `HomeView.swift`, `Boxed_Up_WatchApp.swift`, `WatchSessionManager.swift`
+
+---
+
+## ML Model Architecture
+
+### Model 1: Punch Type Classifier (Critical — Core Game Mechanic)
+
+**Purpose:** Classify the wrist-mounted motion into jab, hook, or uppercut.
+
+| Parameter | Value |
+|-----------|-------|
+| Framework | Create ML `MLActivityClassifier` |
+| Input | 6-channel time series (accX/Y/Z + rotX/Y/Z) at 50 Hz |
+| Prediction window | 50 samples (1.0 second) |
+| Classes | 3: jab, hook, uppercut |
+| Output | PunchType + confidence (0.0–1.0) |
+
+**Why Activity Classifier:**
+- Purpose-built for motion sensor time series
+- Temporal pattern recognition (LSTM/CNN backend)
+- Native Core ML integration — drop `.mlmodel` into Xcode
+- Optimized for on-device inference
+
+**Training (Create ML app or Swift Playground):**
+```swift
+let classifier = try MLActivityClassifier(
+    trainingData: .labeledDirectories(at: trainingURL),
+    featureColumns: ["accX", "accY", "accZ", "rotX", "rotY", "rotZ"],
+    parameters: .init(predictionWindowSize: 50)
+)
+try classifier.write(to: URL(fileURLWithPath: "PunchClassifier.mlmodel"))
+```
+
+**Integration:** Replace the `classifyPunch()` placeholder in `SparringViewModel` with actual Core ML inference via a `PunchClassifier` wrapper.
+
+### Model 2: Punch Detector (Recommended — Replaces Threshold)
+
+**Purpose:** Binary detection of "is this a punch?" — replaces the crude 1.5g acceleration magnitude threshold.
+
+| Parameter | Value |
+|-----------|-------|
+| Framework | Create ML `MLActivityClassifier` |
+| Input | Same 6-channel data at 50 Hz |
+| Prediction window | 25 samples (0.5 second) — smaller for faster detection |
+| Classes | 2: punch, other |
+| Output | Binary classification + confidence |
+
+**Why separate from Model 1:**
+- Smaller window → faster detection → more precise reaction time measurement
+- Dedicated false positive rejection (ignores wrist adjustments, waves, etc.)
+- Punch classifier can focus purely on type discrimination
+- Different optimal window sizes (0.5s detection vs 1.0s classification)
+
+**Training data mapping:**
+- "punch" class: **All** jab + hook + uppercut recordings combined
+- "other" class: All recordings labeled "other"
+
+**Training:**
+```swift
+// Restructure: merge jab/hook/uppercut folders into a single "punch" folder
+let detector = try MLActivityClassifier(
+    trainingData: .labeledDirectories(at: detectorTrainingURL),
+    featureColumns: ["accX", "accY", "accZ", "rotX", "rotY", "rotZ"],
+    parameters: .init(predictionWindowSize: 25)
+)
+try detector.write(to: URL(fileURLWithPath: "PunchDetector.mlmodel"))
+```
+
+### Model 3: Punch Quality Estimator (Future / Optional)
+
+**Purpose:** Rate punch power/form for enhanced scoring.
+
+| Parameter | Value |
+|-----------|-------|
+| Framework | Create ML Tabular Regressor |
+| Input | Aggregated features: peak acceleration, jerk, rotation magnitude, duration |
+| Output | Quality score (0.0–1.0) |
+
+**Integration:** Adds a `qualityMultiplier` to `ScoringEngine`:
+```
+finalScore = basePoints × reactionMultiplier × confidence × qualityMultiplier
+```
+
+**Status:** Not needed for MVP. Can be trained after Models 1 & 2 are working.
+
+### Two-Stage Runtime Pipeline
+
+```
+Watch (50 Hz motion) → WCSession → iPhone
+                                      │
+                                      ▼
+                                ┌──────────────┐
+                                │  Model 2:    │  (25-sample window, continuous)
+                                │  Punch       │───── "other" → discard
+                                │  Detector    │
+                                └──────┬───────┘
+                                       │ "punch" detected
+                                       ▼
+                                ┌──────────────┐
+                                │  Model 1:    │  (50-sample window)
+                                │  Punch Type  │
+                                │  Classifier  │
+                                └──────┬───────┘
+                                       │ jab / hook / uppercut + confidence
+                                       ▼
+                                ┌──────────────┐
+                                │  Scoring     │ → UI update → Watch haptic
+                                │  Engine      │
+                                └──────────────┘
+```
+
+**Latency budget (two-stage):**
+- Watch → iPhone (WCSession): ~30-80ms
+- Model 2 detection: ~5ms
+- Model 1 classification: ~10-20ms
+- **Total: ~45-105ms** — well within real-time requirements
 
 ---
 

@@ -111,7 +111,7 @@ All files in `Shared/` at project root — must be manually added to both target
 
 **Known TODOs:**
 - `SparringViewModel.classifyPunch()` — returns random punch type. Must replace with Core ML model (Phase 3)
-- Data collection mode not yet built (Phase 6)
+- ~~Data collection mode not yet built (Phase 6)~~ ✅ Built
 - No `HKWorkoutSession` integration yet — Watch app may suspend during long rounds
 - No error handling for WCSession disconnects mid-round
 - Timer-based action advancement not yet implemented (currently only advances after punch)
@@ -135,6 +135,90 @@ Wrapped the conditional view content inside a `Group` view and moved `.onAppear`
 
 **Result:**
 Both targets (`Boxed Up` iOS and `Boxed Up Watch Watch App` watchOS) build successfully via `xcodebuild`.
+
+---
+
+## Entry 3 — Phase 6: Training Data Collection Mode + ML Model Plan
+
+### What was built
+
+Implemented the full data collection infrastructure for recording labeled punch training data from the Apple Watch.
+
+#### New files created:
+
+**Shared:**
+- `Shared/Models/DataCollectionLabel.swift` — 4 labels: jab, hook, uppercut, other. Each has display name, description, SF Symbol icon.
+
+**iPhone (iOS target):**
+- `Boxed Up/ViewModels/DataCollectionViewModel.swift` — Recording lifecycle (countdown → capture → save), CSV persistence in labeled directories, consolidated CSV export, session count tracking, motion callback management.
+- `Boxed Up/Views/DataCollectionView.swift` — Full data collection UI: segmented label picker, per-label session counters (color-coded: red < 20, orange < 50, green ≥ 50), record button with 3-2-1 countdown and recording indicator, export via share sheet, delete all with confirmation, Watch connection status. Includes `ShareSheet` UIKit wrapper.
+
+**watchOS target:**
+- `Boxed Up Watch Watch App/Views/WatchDataCollectionView.swift` — Minimal Watch display showing "Data Collection" mode indicator, recording status with haptic feedback on start/stop.
+
+#### Files modified:
+
+- `Shared/Models/WatchMessage.swift` — Added `.enterDataCollection` and `.exitDataCollection` message types (iPhone → Watch) for switching the Watch into data collection mode.
+- `Boxed Up Watch Watch App/WatchSessionManager.swift` — Added `onDataCollectionMode: ((Bool) -> Void)?` callback, routes new message types.
+- `Boxed Up Watch Watch App/Boxed_Up_WatchApp.swift` — Replaced `isRoundActive: Bool` with `WatchAppMode` enum (`.home`, `.game`, `.dataCollection`). Watch now shows `WatchDataCollectionView` when in data collection mode. Added haptic feedback (`.start`/`.stop`) during data collection recording.
+- `Boxed Up/Boxed_UpApp.swift` — Added `DataCollectionViewModel` state and `isDataCollectionMode` flag. Routes to `DataCollectionView` when active. `enterDataCollection()` creates the view model and notifies Watch; `exitDataCollection()` restores `SparringViewModel`'s motion callback.
+- `Boxed Up/Views/HomeView.swift` — Added `onCollectData: () -> Void` parameter. New "Collect Training Data" button below "Start Round".
+- `Boxed Up/ViewModels/SparringViewModel.swift` — Changed `setupMotionCallback()` from `private` to `func` so the app entry point can restore it after data collection.
+
+### Data flow
+
+1. iPhone HomeView → "Collect Training Data" → sends `.enterDataCollection` to Watch
+2. Watch switches to `WatchDataCollectionView`
+3. iPhone: user selects label, taps Record → 3-2-1 countdown
+4. iPhone sends `.startCapture` → Watch starts CoreMotion, streams `.motionData` back
+5. After 3 seconds: iPhone sends `.stopCapture` → Watch stops, plays haptic
+6. iPhone saves buffered samples as CSV in `Documents/TrainingData/{label}/session_*.csv`
+7. Repeat for more samples
+8. iPhone "Done" → sends `.exitDataCollection` → both return to home
+
+### Data format
+
+Individual session CSVs (per recording):
+```
+timestamp,accX,accY,accZ,rotX,rotY,rotZ
+```
+- Compatible with `MLActivityClassifier.DataSource.labeledDirectories(at:)`
+
+Consolidated export CSV (for sharing):
+```
+sessionId,label,timestamp,accX,accY,accZ,rotX,rotY,rotZ
+```
+- Compatible with `MLDataTable` / `DataFrame` workflows
+
+### ML Model Architecture (added to plan.md)
+
+Three models planned for the game:
+
+1. **Punch Type Classifier** (Critical) — 3-class Activity Classifier (jab/hook/uppercut), 50-sample window (1.0s), replaces the `classifyPunch()` random placeholder.
+2. **Punch Detector** (Recommended) — Binary Activity Classifier (punch/other), 25-sample window (0.5s), replaces the crude 1.5g threshold. Smaller window gives faster detection and more precise reaction timing.
+3. **Punch Quality Estimator** (Future/Optional) — Tabular Regressor on aggregated features for enhanced scoring.
+
+Two-stage runtime pipeline: Detector triggers on punch → Classifier identifies type → Scoring Engine evaluates.
+
+### Data collection targets
+
+| Label | Min | Recommended | Purpose |
+|-------|-----|-------------|---------|
+| Jab | 50 | 100+ | Classifier + detector positive |
+| Hook | 50 | 100+ | Classifier + detector positive |
+| Uppercut | 50 | 100+ | Classifier + detector positive |
+| Other | 50 | 100+ | Detector negative class |
+
+### Build result
+
+Both targets (`Boxed Up` iOS and `Boxed Up Watch Watch App` watchOS) build successfully via `xcodebuild`.
+
+### Remaining TODOs
+
+- Phase 3: Integrate actual Core ML models (after training data is collected)
+- `HKWorkoutSession` for Watch keep-alive
+- Timer-based action advancement
+- WCSession disconnect handling
 
 ---
 
