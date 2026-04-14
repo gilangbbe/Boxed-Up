@@ -17,6 +17,7 @@ class SparringViewModel {
     let roundManager = RoundManager()
     let motionBuffer = MotionDataBuffer()
     let sessionManager: PhoneSessionManager
+    private let classifier: PunchClassifierService?
 
     // MARK: - State
 
@@ -37,6 +38,10 @@ class SparringViewModel {
 
     init(sessionManager: PhoneSessionManager) {
         self.sessionManager = sessionManager
+        self.classifier = PunchClassifierService()
+        if classifier == nil {
+            print("[SparringVM] Warning: ML models not loaded — falling back to random classifier")
+        }
         setupMotionCallback()
         setupDisconnectHandling()
     }
@@ -52,6 +57,7 @@ class SparringViewModel {
         gamePhase = .playing
         isWaitingForPunch = true
         motionBuffer.reset()
+        classifier?.resetState()
 
         sessionManager.send(.roundStart)
         sessionManager.send(.startCapture)
@@ -131,8 +137,19 @@ class SparringViewModel {
             guard let self else { return }
             Task { @MainActor in
                 self.motionBuffer.append(samples)
-                if self.isWaitingForPunch && self.motionBuffer.checkForPunch() {
-                    self.processPunch()
+                guard self.isWaitingForPunch else { return }
+
+                if let classifier = self.classifier {
+                    // Two-stage ML pipeline: Detector → Classifier
+                    let detection = classifier.detectPunch(from: self.motionBuffer.allSamples)
+                    if detection.isPunch && detection.confidence > 0.6 {
+                        self.processPunch()
+                    }
+                } else {
+                    // Fallback: threshold-based detection
+                    if self.motionBuffer.checkForPunch() {
+                        self.processPunch()
+                    }
                 }
             }
         }
@@ -191,9 +208,12 @@ class SparringViewModel {
         }
     }
 
-    /// Placeholder classifier — returns a random punch until the Core ML model is integrated.
+    /// Classifies the punch type from the current motion buffer.
     private func classifyPunch(from samples: [MotionSample]) -> (punchType: PunchType, confidence: Double) {
-        // TODO: Replace with PunchClassifier Core ML inference
+        if let classifier {
+            return classifier.classifyPunch(from: samples)
+        }
+        // Fallback if models not loaded
         let randomPunch = PunchType.allCases.randomElement()!
         return (randomPunch, Double.random(in: 0.5...1.0))
     }

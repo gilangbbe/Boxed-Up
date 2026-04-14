@@ -21,6 +21,9 @@ class MotionDataBuffer {
     private(set) var samples: [MotionSample] = []
     private(set) var isPunchDetected: Bool = false
 
+    /// Read-only access to the full sample buffer for ML detection.
+    var allSamples: [MotionSample] { samples }
+
     /// Adds new samples to the buffer. Trims to keep only the latest `windowSize` samples.
     func append(_ newSamples: [MotionSample]) {
         samples.append(contentsOf: newSamples)

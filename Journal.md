@@ -292,4 +292,105 @@ Both targets build successfully via `xcodebuild`.
 
 ---
 
+## Entry 5 — Phase 3: ML Model Training + Core ML Integration
+
+### Overview
+
+Trained two Core ML models from 200 collected sessions (50 per label: jab, hook, uppercut, other) and integrated them into the iOS target, replacing the random placeholder classifier with a two-stage ML pipeline.
+
+### Training
+
+Created `TrainModels.swift` — a self-contained Swift script that:
+1. Parses the consolidated `BoxedUp_TrainingData.csv` (28,830 rows across 200 sessions)
+2. Splits into per-label directories for `MLActivityClassifier.DataSource.labeledDirectories(at:)`
+3. Trains **PunchClassifier** (3-class: jab/hook/uppercut, window=50) from 150 punch-only sessions
+4. Trains **PunchDetector** (2-class: punch/other, window=25) from all 200 sessions (jab+hook+uppercut merged into "punch")
+5. Outputs both `.mlmodel` files to `MLModels/`
+
+**No separate Create ML project needed** — the script runs directly via `swift TrainModels.swift BoxedUp_TrainingData.csv`.
+
+### Training results
+
+| Model | Training Error | Validation Error | Window Size |
+|-------|---------------|-----------------|-------------|
+| PunchClassifier | 4.9% | 50% | 50 (1.0s) |
+| PunchDetector | 1.7% | 29.5% | 25 (0.5s) |
+
+Validation error will improve with more training data (currently at minimum 50 sessions/label). The model is functional but benefits from 100+ sessions per label.
+
+### New files
+
+| File | Purpose |
+|------|---------|
+| `TrainModels.swift` | Swift training script (run on macOS, no Xcode project needed) |
+| `MLModels/PunchClassifier.mlmodel` | 3-class punch type classifier (1.0 MB) |
+| `MLModels/PunchDetector.mlmodel` | Binary punch detector (0.97 MB) |
+| `Boxed Up/MLClassifier/PunchClassifierService.swift` | Core ML wrapper — two-stage pipeline (detect → classify) |
+
+### `PunchClassifierService` design
+
+- Wraps both models behind a single service class
+- `detectPunch(from:)` — Stage 1: binary detection via PunchDetector (25-sample window), returns `(isPunch: Bool, confidence: Double)`
+- `classifyPunch(from:)` — Stage 2: type classification via PunchClassifier (50-sample window), returns `(punchType: PunchType, confidence: Double)`
+- Manages `stateIn`/`stateOut` recurrent state for both models (Activity Classifier uses LSTM)
+- `resetState()` — clears recurrent state between rounds
+- Builds `MLDictionaryFeatureProvider` with 6 feature arrays + state for each prediction
+- Graceful nil init if model files missing from bundle (fallback to random)
+
+### SparringViewModel changes
+
+- Added `classifier: PunchClassifierService?` dependency
+- `startRound()` calls `classifier?.resetState()`
+- `setupMotionCallback()` now uses two-stage pipeline:
+  - If ML models loaded: detector checks each batch (`confidence > 0.6` threshold) → on detection, classifier identifies type
+  - If models missing: falls back to 1.5g acceleration threshold
+- `classifyPunch(from:)` delegates to `classifier.classifyPunch()` or falls back to random
+
+### MotionDataBuffer change
+
+- Added `allSamples` computed property for detector access to the full buffer
+
+### Two-stage runtime pipeline
+
+```
+Motion samples → MotionDataBuffer
+                    │
+                    ▼
+              PunchDetector (25 samples)
+              "Is this a punch?"
+                    │ confidence > 0.6
+                    ▼
+              PunchClassifier (50 samples)
+              "What type of punch?"
+                    │
+                    ▼
+              ScoringEngine → UI → Watch haptic
+```
+
+### Build result
+
+Both targets build successfully via `xcodebuild`.
+
+### Required Xcode manual steps
+
+- Drag `MLModels/PunchClassifier.mlmodel` and `MLModels/PunchDetector.mlmodel` into the iOS target in Xcode
+- Ensure both models have target membership in "Boxed Up" (iOS) only
+- Add `PunchClassifierService.swift` to the iOS target membership
+
+### To retrain models
+
+Collect more training data → export CSV → run:
+```bash
+swift TrainModels.swift BoxedUp_TrainingData.csv
+```
+Then replace the `.mlmodel` files in Xcode.
+
+### Remaining TODOs
+
+- Timer-based action advancement (actions only advance after punch, no timeout)
+- More training data for better accuracy (100+ sessions per label recommended)
+- Phase 7: full integration & polish
+
+---
+
 *End of journal. Update this file after every implementation session.*
