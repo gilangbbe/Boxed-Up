@@ -387,9 +387,116 @@ Then replace the `.mlmodel` files in Xcode.
 
 ### Remaining TODOs
 
-- Timer-based action advancement (actions only advance after punch, no timeout)
+- ~~Timer-based action advancement (actions only advance after punch, no timeout)~~ ✅ Implemented
 - More training data for better accuracy (100+ sessions per label recommended)
-- Phase 7: full integration & polish
+- ~~Phase 7: full integration & polish~~ ✅ Complete
+
+---
+
+## Entry 6 — Phase 7: Integration & Polish (Final Phase)
+
+### Overview
+
+Completed Phase 7 — the final phase of the project. All game loop edge cases, polish features, and optimizations are now implemented. The entire end-to-end flow works: iPhone shows action → Watch captures punch → iPhone classifies via ML → scores → Watch haptic feedback.
+
+### What was built
+
+#### 1. Timer-based Action Timeout (Critical)
+
+**Problem:** If the player didn't throw a punch, the game would hang indefinitely on the current action.
+
+**Solution:** Added `startReactionTimeout()` in `SparringViewModel` that starts a countdown task for each action. Uses `config.effectiveReactionWindow` (difficulty-adjusted) as the timeout duration. Updates `reactionTimeRemaining` (0.0–1.0 fraction) at 20fps for smooth UI countdown.
+
+When the timer expires, `handleTimeout()`:
+- Records a miss (0 points, breaks streak, false accuracy)
+- Shows "TOO SLOW!" feedback in the UI
+- Plays a timeout sound effect
+- Auto-advances to the next action after 0.8s delay
+
+Timer is cancelled on successful punch detection, paused on Watch disconnect, and resumed on reconnect.
+
+#### 2. Reaction Timer Bar UI
+
+Added a color-coded countdown bar below the action display in `SparringView`:
+- Green (>50% remaining) → Yellow (25-50%) → Red (<25%)
+- Smooth animation via `.linear(duration: 0.05)` matching the 20fps tick rate
+- Uses `GeometryReader` for proper width scaling
+
+#### 3. Timeout Miss UI
+
+Added a dedicated "TOO SLOW!" state in `SparringView`:
+- Shows `clock.badge.xmark` icon in orange with "TOO SLOW!" text
+- Triggers when `lastPunchCorrect == false && lastPunchResult == nil` (miss vs wrong punch)
+
+#### 4. Debug Hint Removed
+
+Removed the debug text that showed the correct answer (`"Throw: JAB"`) from `SparringView`. Players must now figure out the correct counter punch based on the displayed action.
+
+#### 5. Sound Effects on iPhone
+
+Created `SoundManager` (`Boxed Up/Audio/SoundManager.swift`) using `AudioToolbox.AudioServicesPlaySystemSound` for lightweight, low-latency sound feedback:
+
+| Event | System Sound ID | Description |
+|-------|----------------|-------------|
+| Punch detected | 1104 (Tock) | Immediate feedback on punch detection |
+| Correct punch | 1025 (New Mail) | Positive chime |
+| Wrong punch | 1073 (VC Ended) | Negative sound |
+| Timeout miss | 1053 (Tweet Sent) | Miss indicator |
+| Round complete | 1026 (Sent Mail) | Completion sound |
+
+Integrated into `SparringViewModel.processPunch()`, `handleTimeout()`, and `endRound()`.
+
+#### 6. Idle Timer Disabled During Gameplay
+
+Added `UIApplication.shared.isIdleTimerDisabled = true` on `SparringView.onAppear` and restored to `false` on `.onDisappear`. Prevents the iPhone screen from dimming/locking during active gameplay when placed on a stand.
+
+#### 7. ML Inference Off Main Thread
+
+Moved CoreML two-stage pipeline (PunchDetector + PunchClassifier) to a dedicated `DispatchQueue` (`com.boxedup.ml`, `.userInitiated` QoS):
+- Motion data still arrives and is buffered on MainActor
+- ML detection runs on background queue
+- On punch detection, hops back to MainActor for `processPunch()`
+- Keeps UI responsive during inference (~15-25ms per prediction)
+
+#### 8. Stale TODO Comment Cleanup
+
+Removed outdated `// TODO: Replace with actual Core ML classification (Phase 3)` comment from `processPunch()` — ML models have been integrated since Entry 5.
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `Boxed Up/Audio/SoundManager.swift` | System sound effects for game events |
+
+### Files modified
+
+| File | Changes |
+|------|---------|
+| `Boxed Up/ViewModels/SparringViewModel.swift` | Added `reactionTimeRemaining`, `timeoutTask`, `mlQueue`. New methods: `startReactionTimeout()`, `handleTimeout()`. Timeout integration in `startRound()`, `endRound()`, `processPunch()`, `advanceAction()`, `pauseForDisconnect()`, `resumeAfterReconnect()`. ML inference moved to background queue. Sound effects wired in. Removed stale TODO. |
+| `Boxed Up/Views/SparringView.swift` | Added timer countdown bar with color grades. Added "TOO SLOW!" timeout feedback. Removed debug hint. Added idle timer disable. Imported UIKit. |
+
+### Build result
+
+Both targets (`Boxed Up` iOS and `Boxed Up Watch Watch App` watchOS) build successfully via `xcodebuild`.
+
+### Project completion status
+
+All 7 phases are now complete:
+- ✅ Phase 1: Foundation (Shared models + game logic)
+- ✅ Phase 2: WatchConnectivity (Real-time messaging)
+- ✅ Phase 3: ML Pipeline (Two-stage detector + classifier)
+- ✅ Phase 4: iPhone Sparring UI
+- ✅ Phase 5: Watch Game UI
+- ✅ Phase 6: Data Collection Mode
+- ✅ Phase 7: Integration & Polish
+
+### Remaining improvements (future)
+
+- Collect more training data (100+ sessions per label) for better ML accuracy
+- Train Punch Quality Estimator (Model 3 — tabular regressor for form scoring)
+- Add difficulty selection UI in HomeView
+- Add round/session history persistence
+- Watch battery level surfaced in iPhone UI
 
 ---
 

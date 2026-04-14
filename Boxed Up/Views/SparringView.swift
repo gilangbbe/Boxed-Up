@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 struct SparringView: View {
     @Bindable var viewModel: SparringViewModel
@@ -37,13 +38,25 @@ struct SparringView: View {
                     Text(action.displayLabel)
                         .font(.title.bold())
                         .foregroundStyle(action.isAttack ? .red : .green)
-
-                    Text("Throw: \(CounterMapping.correctPunch(for: action).rawValue.uppercased())")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                 }
                 .transition(.scale.combined(with: .opacity))
                 .animation(.easeInOut(duration: 0.3), value: viewModel.roundManager.currentActionIndex)
+
+                // Reaction time countdown bar
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(.gray.opacity(0.3))
+                            .frame(height: 8)
+
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(timerColor(for: viewModel.reactionTimeRemaining))
+                            .frame(width: geo.size.width * viewModel.reactionTimeRemaining, height: 8)
+                            .animation(.linear(duration: 0.05), value: viewModel.reactionTimeRemaining)
+                    }
+                }
+                .frame(height: 8)
+                .padding(.horizontal, 32)
             }
 
             Spacer()
@@ -61,6 +74,18 @@ struct SparringView: View {
                     Text(String(format: "%.2fs • %.0f%% confidence", result.reactionTime, result.confidence * 100))
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                }
+                .transition(.opacity)
+            } else if viewModel.lastPunchCorrect == false && viewModel.lastPunchResult == nil {
+                // Timeout miss
+                VStack(spacing: 8) {
+                    Image(systemName: "clock.badge.xmark")
+                        .font(.system(size: 40))
+                        .foregroundStyle(.orange)
+
+                    Text("TOO SLOW!")
+                        .font(.headline)
+                        .foregroundStyle(.orange)
                 }
                 .transition(.opacity)
             } else if viewModel.isWaitingForPunch {
@@ -118,5 +143,17 @@ struct SparringView: View {
                 }
             }
         }
+        .onAppear {
+            UIApplication.shared.isIdleTimerDisabled = true
+        }
+        .onDisappear {
+            UIApplication.shared.isIdleTimerDisabled = false
+        }
+    }
+
+    private func timerColor(for remaining: Double) -> Color {
+        if remaining > 0.5 { return .green }
+        if remaining > 0.25 { return .yellow }
+        return .red
     }
 }

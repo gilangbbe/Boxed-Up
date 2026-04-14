@@ -18,6 +18,7 @@ class SparringViewModel {
     let motionBuffer = MotionDataBuffer()
     let sessionManager: PhoneSessionManager
     private let classifier: PunchClassifierService?
+    private let mlQueue = DispatchQueue(label: "com.boxedup.ml", qos: .userInitiated)
 
     // MARK: - State
 
@@ -27,6 +28,9 @@ class SparringViewModel {
     private(set) var isWaitingForPunch: Bool = false
     private(set) var gamePhase: GamePhase = .home
     private(set) var isDisconnected: Bool = false
+    private(set) var reactionTimeRemaining: Double = 1.0  // 0.0–1.0 fraction
+
+    private var timeoutTask: Task<Void, Never>?
 
     enum GamePhase {
         case home
@@ -56,6 +60,7 @@ class SparringViewModel {
         roundManager.startRound()
         gamePhase = .playing
         isWaitingForPunch = true
+        reactionTimeRemaining = 1.0
         motionBuffer.reset()
         classifier?.resetState()
 
@@ -65,12 +70,18 @@ class SparringViewModel {
         if let action = roundManager.currentAction {
             sessionManager.send(.gameState(action))
         }
+
+        startReactionTimeout()
     }
 
     func endRound() {
+        timeoutTask?.cancel()
+        timeoutTask = nil
         roundManager.endRound()
         isWaitingForPunch = false
         gamePhase = .results
+
+        SoundManager.playRoundComplete()
 
         sessionManager.send(.stopCapture)
         sessionManager.send(.roundEnd)
@@ -92,9 +103,9 @@ class SparringViewModel {
               let window = motionBuffer.captureWindow() else { return }
 
         isWaitingForPunch = false
+        timeoutTask?.cancel()
+        timeoutTask = nil
 
-        // TODO: Replace with actual Core ML classification (Phase 3)
-        // For now, use a placeholder that picks a random punch type
         let classifiedPunch = classifyPunch(from: window)
         let correct = CounterMapping.isCorrect(punch: classifiedPunch.punchType, for: action)
 
@@ -120,12 +131,67 @@ class SparringViewModel {
         lastPunchResult = result
         lastPunchCorrect = correct
 
+        // Sound + haptic feedback
+        SoundManager.playPunchDetected()
+        if correct {
+            SoundManager.playCorrect()
+        } else {
+            SoundManager.playWrong()
+        }
+
         // Send haptic feedback to Watch
         sessionManager.send(.punchDetected(classifiedPunch.punchType, correct: correct))
 
         // Advance to next action after a brief delay
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(1.0))
+            self.advanceAction()
+        }
+    }
+
+    // MARK: - Reaction Timeout
+
+    private func startReactionTimeout() {
+        timeoutTask?.cancel()
+        reactionTimeRemaining = 1.0
+        let window = roundManager.config.effectiveReactionWindow
+        let tickInterval: TimeInterval = 0.05  // 20 fps countdown
+
+        timeoutTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            let startDate = Date()
+
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(tickInterval))
+                guard !Task.isCancelled else { return }
+
+                let elapsed = Date().timeIntervalSince(startDate)
+                let remaining = max(0, 1.0 - elapsed / window)
+                self.reactionTimeRemaining = remaining
+
+                if remaining <= 0 {
+                    self.handleTimeout()
+                    return
+                }
+            }
+        }
+    }
+
+    private func handleTimeout() {
+        guard isWaitingForPunch else { return }
+        isWaitingForPunch = false
+
+        // Record a miss — no punch thrown in time
+        score.recordPunch(correct: false, points: 0, reactionTime: roundManager.config.effectiveReactionWindow, confidence: 0)
+
+        lastPunchResult = nil
+        lastPunchCorrect = false
+
+        SoundManager.playTimeout()
+
+        // Advance to next action after a brief delay
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(0.8))
             self.advanceAction()
         }
     }
@@ -140,10 +206,15 @@ class SparringViewModel {
                 guard self.isWaitingForPunch else { return }
 
                 if let classifier = self.classifier {
-                    // Two-stage ML pipeline: Detector → Classifier
-                    let detection = classifier.detectPunch(from: self.motionBuffer.allSamples)
-                    if detection.isPunch && detection.confidence > 0.6 {
-                        self.processPunch()
+                    // Run ML inference off the main thread
+                    let allSamples = self.motionBuffer.allSamples
+                    self.mlQueue.async { [weak self] in
+                        let detection = classifier.detectPunch(from: allSamples)
+                        if detection.isPunch && detection.confidence > 0.6 {
+                            Task { @MainActor in
+                                self?.processPunch()
+                            }
+                        }
                     }
                 } else {
                     // Fallback: threshold-based detection
@@ -173,6 +244,8 @@ class SparringViewModel {
     private func pauseForDisconnect() {
         isDisconnected = true
         isWaitingForPunch = false
+        timeoutTask?.cancel()
+        timeoutTask = nil
         roundManager.pauseReactionTimer()
     }
 
@@ -189,6 +262,7 @@ class SparringViewModel {
 
         roundManager.resumeReactionTimer()
         isWaitingForPunch = true
+        startReactionTimeout()
     }
 
     private func advanceAction() {
@@ -205,6 +279,7 @@ class SparringViewModel {
             if let action = roundManager.currentAction {
                 sessionManager.send(.gameState(action))
             }
+            startReactionTimeout()
         }
     }
 
