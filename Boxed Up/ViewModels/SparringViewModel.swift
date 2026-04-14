@@ -25,6 +25,7 @@ class SparringViewModel {
     private(set) var lastPunchCorrect: Bool?
     private(set) var isWaitingForPunch: Bool = false
     private(set) var gamePhase: GamePhase = .home
+    private(set) var isDisconnected: Bool = false
 
     enum GamePhase {
         case home
@@ -37,6 +38,7 @@ class SparringViewModel {
     init(sessionManager: PhoneSessionManager) {
         self.sessionManager = sessionManager
         setupMotionCallback()
+        setupDisconnectHandling()
     }
 
     // MARK: - Game Flow
@@ -45,6 +47,7 @@ class SparringViewModel {
         score = Score()
         lastPunchResult = nil
         lastPunchCorrect = nil
+        isDisconnected = false
         roundManager.startRound()
         gamePhase = .playing
         isWaitingForPunch = true
@@ -133,6 +136,42 @@ class SparringViewModel {
                 }
             }
         }
+    }
+
+    private func setupDisconnectHandling() {
+        sessionManager.onReachabilityChanged = { [weak self] reachable in
+            guard let self else { return }
+            Task { @MainActor in
+                if self.gamePhase == .playing {
+                    if !reachable {
+                        self.pauseForDisconnect()
+                    } else if self.isDisconnected {
+                        self.resumeAfterReconnect()
+                    }
+                }
+            }
+        }
+    }
+
+    private func pauseForDisconnect() {
+        isDisconnected = true
+        isWaitingForPunch = false
+        roundManager.pauseReactionTimer()
+    }
+
+    private func resumeAfterReconnect() {
+        isDisconnected = false
+        motionBuffer.reset()
+
+        // Re-send current state to Watch
+        sessionManager.send(.roundStart)
+        sessionManager.send(.startCapture)
+        if let action = roundManager.currentAction {
+            sessionManager.send(.gameState(action))
+        }
+
+        roundManager.resumeReactionTimer()
+        isWaitingForPunch = true
     }
 
     private func advanceAction() {

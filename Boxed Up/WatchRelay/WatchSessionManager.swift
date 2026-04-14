@@ -19,6 +19,8 @@ class PhoneSessionManager: NSObject {
     var onMotionData: (([MotionSample]) -> Void)?
     /// Called when Watch signals motion started/stopped.
     var onMotionLifecycle: ((Bool) -> Void)?
+    /// Called when Watch reachability changes (true = reachable, false = disconnected).
+    var onReachabilityChanged: ((Bool) -> Void)?
 
     private var session: WCSession {
         WCSession.default
@@ -67,6 +69,7 @@ extension PhoneSessionManager: WCSessionDelegate {
     func sessionReachabilityDidChange(_ session: WCSession) {
         Task { @MainActor in
             self.isWatchReachable = session.isReachable
+            self.onReachabilityChanged?(session.isReachable)
         }
     }
 

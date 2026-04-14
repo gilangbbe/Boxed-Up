@@ -216,9 +216,79 @@ Both targets (`Boxed Up` iOS and `Boxed Up Watch Watch App` watchOS) build succe
 ### Remaining TODOs
 
 - Phase 3: Integrate actual Core ML models (after training data is collected)
-- `HKWorkoutSession` for Watch keep-alive
+- ~~`HKWorkoutSession` for Watch keep-alive~~ ✅ Built
 - Timer-based action advancement
-- WCSession disconnect handling
+- ~~WCSession disconnect handling~~ ✅ Built
+
+---
+
+## Entry 4 — HKWorkoutSession + WCSession Disconnect Handling
+
+### What was built
+
+Two reliability features implemented in parallel with Phase 6:
+
+#### 1. HKWorkoutSession (Watch keep-alive)
+
+**Problem:** watchOS suspends apps after a few seconds of inactivity. During gameplay or data collection, the Watch app would lose the ability to capture motion.
+
+**Solution:** Created `WorkoutSessionManager` that wraps `HKWorkoutSession` with `.boxing` activity type. Session starts/ends automatically with round lifecycle and data collection mode.
+
+**New file:**
+- `Boxed Up Watch Watch App/WorkoutSessionManager.swift` — `@Observable` class wrapping `HKHealthStore`, `HKWorkoutSession`, and `HKLiveWorkoutBuilder`. Handles authorization, session start/end, and workout builder lifecycle. Implements both `HKWorkoutSessionDelegate` and `HKLiveWorkoutBuilderDelegate`.
+
+**Wiring in `Boxed_Up_WatchApp.swift`:**
+- `workoutManager.requestAuthorization()` called during setup
+- `workoutManager.startSession()` on round start and entering data collection mode
+- `workoutManager.endSession()` on round end and exiting data collection mode
+
+**Note:** Requires HealthKit capability to be enabled in Xcode for the watchOS target.
+
+#### 2. WCSession disconnect handling (game pause/resume)
+
+**Problem:** If the Watch disconnects mid-round (out of range, Watch app backgrounded), the game would silently break — no motion data arrives, no feedback is sent.
+
+**Solution:** Added reachability change callbacks on both sides with automatic pause/resume.
+
+**iPhone side (PhoneSessionManager + SparringViewModel):**
+- `PhoneSessionManager.onReachabilityChanged` callback fires on Watch reachability changes
+- `SparringViewModel` tracks `isDisconnected` state
+- On disconnect during `.playing`: pauses reaction timer (`RoundManager.pauseReactionTimer()`), stops waiting for punches
+- On reconnect: resets motion buffer, re-sends current game state to Watch (`roundStart` + `startCapture` + `gameState`), resumes timer preserving elapsed time
+- `SparringView` shows a full-screen "Watch Disconnected" overlay with activity indicator and "End Round" escape button
+
+**Watch side (WatchSessionManager + Boxed_Up_WatchApp):**
+- `WatchSessionManager.onReachabilityChanged` callback fires on iPhone reachability changes
+- On iPhone disconnect: stops motion capture (conserves battery), plays `.failure` haptic
+
+**RoundManager changes:**
+- Added `pausedElapsed: TimeInterval?` property
+- `pauseReactionTimer()` — captures elapsed time and nils out `actionStartTime`
+- `resumeReactionTimer()` — restores `actionStartTime` offset by previously elapsed time so scoring isn't penalized by disconnect duration
+
+### Files modified
+
+| File | Changes |
+|------|---------|
+| `Boxed Up Watch Watch App/Boxed_Up_WatchApp.swift` | Added `workoutManager`, wired HKWorkoutSession lifecycle + disconnect handling |
+| `Boxed Up Watch Watch App/WatchSessionManager.swift` | Added `onReachabilityChanged` callback, fires in `sessionReachabilityDidChange` |
+| `Boxed Up/WatchRelay/WatchSessionManager.swift` | Added `onReachabilityChanged` callback, fires in `sessionReachabilityDidChange` |
+| `Boxed Up/ViewModels/SparringViewModel.swift` | Added `isDisconnected` state, `setupDisconnectHandling()`, `pauseForDisconnect()`, `resumeAfterReconnect()` |
+| `Boxed Up/Views/SparringView.swift` | Added disconnect overlay with reconnection UI |
+| `Shared/GameLogic/RoundManager.swift` | Added `pausedElapsed`, `pauseReactionTimer()`, `resumeReactionTimer()` |
+
+### New file
+
+- `Boxed Up Watch Watch App/WorkoutSessionManager.swift`
+
+### Build result
+
+Both targets build successfully via `xcodebuild`.
+
+### Required Xcode manual steps
+
+- Enable **HealthKit** capability on the watchOS target (Signing & Capabilities)
+- Add `NSHealthShareUsageDescription` and `NSHealthUpdateUsageDescription` to watchOS Info.plist
 
 ---
 

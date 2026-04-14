@@ -13,6 +13,7 @@ struct Boxed_Up_Watch_Watch_AppApp: App {
     @State private var sessionManager = WatchSessionManager()
     @State private var motionManager = WatchMotionManager()
     @State private var motionStreamer: MotionStreamer?
+    @State private var workoutManager = WorkoutSessionManager()
 
     enum WatchAppMode { case home, game, dataCollection }
     @State private var appMode: WatchAppMode = .home
@@ -43,6 +44,7 @@ struct Boxed_Up_Watch_Watch_AppApp: App {
         motionStreamer = streamer
 
         sessionManager.activate()
+        workoutManager.requestAuthorization()
 
         // Forward motion samples to streamer
         motionManager.onSample = { sample in
@@ -87,9 +89,12 @@ struct Boxed_Up_Watch_Watch_AppApp: App {
         sessionManager.onRoundLifecycle = { started in
             Task { @MainActor in
                 appMode = started ? .game : .home
-                if !started {
+                if started {
+                    workoutManager.startSession()
+                } else {
                     currentAction = nil
                     lastPunchCorrect = nil
+                    workoutManager.endSession()
                 }
             }
         }
@@ -99,6 +104,21 @@ struct Boxed_Up_Watch_Watch_AppApp: App {
             Task { @MainActor in
                 appMode = active ? .dataCollection : .home
                 isDataCollectionRecording = false
+                if active {
+                    workoutManager.startSession()
+                } else {
+                    workoutManager.endSession()
+                }
+            }
+        }
+
+        // Handle iPhone disconnect — pause motion capture to conserve resources
+        sessionManager.onReachabilityChanged = { reachable in
+            Task { @MainActor in
+                if !reachable && motionManager.isCapturing {
+                    motionManager.stopCapture()
+                    WKInterfaceDevice.current().play(.failure)
+                }
             }
         }
     }

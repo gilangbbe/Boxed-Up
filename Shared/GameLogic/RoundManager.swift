@@ -57,6 +57,7 @@ class RoundManager {
     private(set) var actions: [GameAction] = []
     private(set) var isRoundActive: Bool = false
     private(set) var actionStartTime: Date?
+    private var pausedElapsed: TimeInterval?
 
     var currentAction: GameAction? {
         guard isRoundActive, currentActionIndex < actions.count else { return nil }
@@ -94,6 +95,25 @@ class RoundManager {
     func endRound() {
         isRoundActive = false
         actionStartTime = nil
+        pausedElapsed = nil
+    }
+
+    // MARK: - Pause / Resume (for disconnect handling)
+
+    func pauseReactionTimer() {
+        guard let start = actionStartTime else { return }
+        pausedElapsed = Date().timeIntervalSince(start)
+        actionStartTime = nil
+    }
+
+    func resumeReactionTimer() {
+        guard let elapsed = pausedElapsed else {
+            actionStartTime = Date()
+            return
+        }
+        // Set actionStartTime back so elapsedReactionTime accounts for pre-pause time
+        actionStartTime = Date().addingTimeInterval(-elapsed)
+        pausedElapsed = nil
     }
 
     // MARK: - Action Generation

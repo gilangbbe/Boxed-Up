@@ -77,5 +77,46 @@ struct SparringView: View {
                 .foregroundStyle(.secondary)
         }
         .padding()
+        .overlay {
+            if viewModel.isDisconnected {
+                ZStack {
+                    Color.black.opacity(0.7)
+                        .ignoresSafeArea()
+
+                    VStack(spacing: 16) {
+                        Image(systemName: "applewatch.slash")
+                            .font(.system(size: 50))
+                            .foregroundStyle(.red)
+
+                        Text("Watch Disconnected")
+                            .font(.title2.bold())
+                            .foregroundStyle(.white)
+
+                        Text("Game paused. Move closer to your iPhone to reconnect.")
+                            .font(.subheadline)
+                            .foregroundStyle(.white.opacity(0.8))
+                            .multilineTextAlignment(.center)
+
+                        ProgressView()
+                            .tint(.white)
+                            .padding(.top, 8)
+
+                        Button {
+                            viewModel.endRound()
+                        } label: {
+                            Text("End Round")
+                                .font(.subheadline)
+                                .padding(.horizontal, 24)
+                                .padding(.vertical, 10)
+                                .background(.red.opacity(0.3))
+                                .foregroundStyle(.white)
+                                .clipShape(RoundedRectangle(cornerRadius: 10))
+                        }
+                        .padding(.top, 4)
+                    }
+                    .padding(32)
+                }
+            }
+        }
     }
 }

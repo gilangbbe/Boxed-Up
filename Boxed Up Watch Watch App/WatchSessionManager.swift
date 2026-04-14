@@ -25,6 +25,8 @@ class WatchSessionManager: NSObject {
     var onRoundLifecycle: ((Bool) -> Void)?
     /// Called when iPhone enters/exits data collection mode.
     var onDataCollectionMode: ((Bool) -> Void)?
+    /// Called when iPhone reachability changes.
+    var onReachabilityChanged: ((Bool) -> Void)?
 
     private var session: WCSession {
         WCSession.default
@@ -59,6 +61,7 @@ extension WatchSessionManager: WCSessionDelegate {
     func sessionReachabilityDidChange(_ session: WCSession) {
         Task { @MainActor in
             self.isPhoneReachable = session.isReachable
+            self.onReachabilityChanged?(session.isReachable)
         }
     }
 
