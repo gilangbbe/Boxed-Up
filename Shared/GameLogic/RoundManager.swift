@@ -54,12 +54,12 @@ class RoundManager {
 
     var config = Config()
     private(set) var currentActionIndex: Int = 0
-    private(set) var actions: [GameAction] = []
+    private(set) var actions: [PunchType] = []
     private(set) var isRoundActive: Bool = false
     private(set) var actionStartTime: Date?
     private var pausedElapsed: TimeInterval?
 
-    var currentAction: GameAction? {
+    var currentAction: PunchType? {
         guard isRoundActive, currentActionIndex < actions.count else { return nil }
         return actions[currentActionIndex]
     }
@@ -118,16 +118,16 @@ class RoundManager {
 
     // MARK: - Action Generation
 
-    /// Generates a balanced, randomized sequence of GameActions.
-    /// Ensures no more than 2 consecutive same-type actions (attack/opening).
-    private func generateActionSequence(count: Int) -> [GameAction] {
-        var sequence: [GameAction] = []
-        let allActions = GameAction.allCases
+    /// Generates a balanced, randomized sequence of PunchTypes.
+    /// Ensures no more than 2 consecutive same punch type.
+    private func generateActionSequence(count: Int) -> [PunchType] {
+        var sequence: [PunchType] = []
+        let allPunches = PunchType.allCases
 
         for _ in 0..<count {
-            var candidate: GameAction
+            var candidate: PunchType
             repeat {
-                candidate = allActions.randomElement()!
+                candidate = allPunches.randomElement()!
             } while wouldCreateBadRun(sequence: sequence, next: candidate)
             sequence.append(candidate)
         }
@@ -135,11 +135,11 @@ class RoundManager {
         return sequence
     }
 
-    /// Prevents 3+ consecutive actions of the same category (attack/opening).
-    private func wouldCreateBadRun(sequence: [GameAction], next: GameAction) -> Bool {
+    /// Prevents 3+ consecutive same punch type.
+    private func wouldCreateBadRun(sequence: [PunchType], next: PunchType) -> Bool {
         guard sequence.count >= 2 else { return false }
         let last = sequence[sequence.count - 1]
         let secondLast = sequence[sequence.count - 2]
-        return last.isAttack == next.isAttack && secondLast.isAttack == next.isAttack
+        return last == next && secondLast == next
     }
 }

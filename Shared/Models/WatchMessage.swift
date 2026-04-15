@@ -19,7 +19,7 @@ enum WatchMessage {
     case startCapture
     case stopCapture
     case punchDetected(PunchType, correct: Bool)
-    case gameState(GameAction)
+    case gameState(PunchType)
     case roundStart
     case roundEnd
     case enterDataCollection
@@ -51,8 +51,8 @@ enum WatchMessage {
             return [Keys.type: "stopCapture"]
         case .punchDetected(let punch, let correct):
             return [Keys.type: "punchDetected", Keys.punchType: punch.rawValue, Keys.correct: correct]
-        case .gameState(let action):
-            return [Keys.type: "gameState", Keys.action: action.rawValue]
+        case .gameState(let punch):
+            return [Keys.type: "gameState", Keys.action: punch.rawValue]
         case .roundStart:
             return [Keys.type: "roundStart"]
         case .roundEnd:
@@ -89,8 +89,8 @@ enum WatchMessage {
             return .punchDetected(punch, correct: correct)
         case "gameState":
             guard let rawAction = dictionary[Keys.action] as? String,
-                  let action = GameAction(rawValue: rawAction) else { return nil }
-            return .gameState(action)
+                  let punch = PunchType(rawValue: rawAction) else { return nil }
+            return .gameState(punch)
         case "roundStart":
             return .roundStart
         case "roundEnd":

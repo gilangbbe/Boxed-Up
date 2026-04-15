@@ -608,4 +608,91 @@ Both targets (iOS and watchOS) build successfully.
 
 ---
 
+## Entry 9 — Simplified Game Mechanic & Difficulty Selection UI
+
+### Problem
+
+The original game mechanic required the player to interpret an attack or opening and then mentally map it to the correct counter punch (e.g., "ATTACK — JAB" means throw an uppercut). This counter-mapping added cognitive overhead that detracted from the core physical reaction experience.
+
+### Solution: Direct Punch Display
+
+Changed the game to display the punch type directly: the screen now shows "JAB", "HOOK", or "UPPERCUT" and the player simply throws that exact punch. This eliminates the `GameAction` → `CounterMapping` → `PunchType` indirection.
+
+**Before:** Display `GameAction` (6 types: 3 attacks + 3 openings) → Player figures out correct counter → `CounterMapping.isCorrect(punch:for:)` checks answer
+
+**After:** Display `PunchType` directly (JAB/HOOK/UPPERCUT) → Player throws that punch → Direct comparison (`thrownPunch == expectedPunch`)
+
+### Changes
+
+#### `Shared/GameLogic/RoundManager.swift`
+- Changed `actions: [GameAction]` → `actions: [PunchType]`
+- Changed `currentAction: GameAction?` → `currentAction: PunchType?`
+- Updated `generateActionSequence()` to pick from `PunchType.allCases`
+- Updated `wouldCreateBadRun()` to prevent 3+ consecutive same punch type (was previously checking attack/opening category)
+
+#### `Shared/Models/WatchMessage.swift`
+- Changed `.gameState(GameAction)` → `.gameState(PunchType)`
+- Updated encode/decode to serialize `PunchType.rawValue` instead of `GameAction.rawValue`
+
+#### `Boxed Up/ViewModels/SparringViewModel.swift`
+- Replaced `CounterMapping.isCorrect(punch:for:)` with direct comparison: `classifiedPunch.punchType == expectedPunch`
+- Updated all `.gameState()` sends to pass `PunchType` from `roundManager.currentAction`
+
+#### `Boxed Up/Views/SparringView.swift`
+- Replaced attack/opening display (red/green with shield/scope icons) with a single boxing icon and punch type label
+- Shows `punch.rawValue.uppercased()` (e.g., "JAB") in bold red
+
+#### `Boxed Up Watch Watch App/Views/WatchGameView.swift`
+- Updated to accept `PunchType?` instead of `GameAction?`
+- Simplified display to show punch type directly with boxing icon
+
+#### `Boxed Up Watch Watch App/WatchSessionManager.swift`
+- Changed `onGameState` callback type from `((GameAction) -> Void)?` to `((PunchType) -> Void)?`
+
+#### `Boxed Up Watch Watch App/Boxed_Up_WatchApp.swift`
+- Changed `currentAction` state from `GameAction?` to `PunchType?`
+
+### Files now unused
+
+| File | Status |
+|------|--------|
+| `Shared/Models/GameAction.swift` | No longer referenced by game flow. Can be removed. |
+| `Shared/GameLogic/CounterMapping.swift` | No longer referenced. Can be removed. |
+
+### Solution: Difficulty Selection UI
+
+Added a segmented `Picker` to `HomeView` allowing the player to choose Easy, Normal, or Hard difficulty before starting a round.
+
+#### `Boxed Up/Views/HomeView.swift`
+- Added a "Difficulty" label with a segmented `Picker` bound to `viewModel.roundManager.config.difficulty`
+- Picker uses `RoundManager.Config.Difficulty.allCases` to populate options
+- Placed between the Watch connection status and the Start Round button
+
+The existing `RoundManager.Config.Difficulty` enum already had the multipliers:
+- **Easy:** 1.3× interval, 1.3× reaction window (slower, more forgiving)
+- **Normal:** 1.0× (default)
+- **Hard:** 0.7× interval, 0.7× reaction window (faster, less forgiving)
+
+### Build result
+
+Both targets (iOS and watchOS) build successfully.
+
+### Post-build fix: `roundManager` binding error
+
+The difficulty `Picker` in `HomeView` creates a binding via `$viewModel.roundManager.config.difficulty`. This requires a writable key path through the `@Observable` class. `roundManager` was declared as `let` in `SparringViewModel`, which makes the property read-only and prevents SwiftUI from creating a `Binding` through it.
+
+**Fix:** Changed `let roundManager = RoundManager()` to `var roundManager = RoundManager()` in `SparringViewModel.swift`. With the `@Observable` macro, `var` properties get synthesized get/set accessors that enable `@Bindable` to produce writable bindings.
+
+### Updated `plan.md`
+
+Updated the project plan to reflect the current architecture:
+- Removed `GameAction.swift` and `CounterMapping.swift` from the folder structure and data model sections
+- Updated `WatchMessage` to show `.gameState(PunchType)` instead of `.gameState(GameAction)`
+- Updated `SparringView` description to show direct punch type display
+- Updated `SparringViewModel` game flow to reflect direct comparison, two-stage ML pipeline, timeout/disconnect handling, sound effects
+- Updated `HomeView` description to include difficulty picker
+- Updated `WatchGameView` description to show punch type display
+
+---
+
 *End of journal. Update this file after every implementation session.*

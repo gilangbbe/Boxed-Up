@@ -19,13 +19,11 @@ Motion-controlled boxing reaction game. **Apple Watch** captures real punches vi
   ├── Shared/                    # Cross-platform (iOS + watchOS)
   │   ├── Models/
   │   │   ├── PunchType.swift         # enum: jab, hook, uppercut
-  │   │   ├── GameAction.swift        # guard/attack prompts
   │   │   ├── PunchResult.swift       # classification result + confidence
   │   │   └── WatchMessage.swift      # Codable messages for WatchConnectivity
   │   └── GameLogic/
   │       ├── ScoringEngine.swift     # correctness, reaction time, confidence scoring
-  │       ├── RoundManager.swift      # round state, action sequences, timing
-  │       └── CounterMapping.swift    # maps game actions → correct player counters
+  │       └── RoundManager.swift      # round state, punch sequences, timing, difficulty
   ├── Boxed Up/                       # iPhone — sparring display + ML hub
   │   ├── Boxed_UpApp.swift
   │   ├── Views/
@@ -59,36 +57,20 @@ Motion-controlled boxing reaction game. **Apple Watch** captures real punches vi
 
 > **One-hand constraint:** Player wears Apple Watch on their punching wrist. All motion data comes from one arm — no left/right directional distinction is possible. The iPhone stays on a surface during gameplay for display computer action.
 
-- `PunchType` — enum: `.jab`, `.hook`, `.uppercut`
-- `GameAction` — enum with 6 actions (no directional variants):
-  - **Attack actions** (opponent attacks, player must counter):
-    - `.attackJab` — opponent jabs at player
-    - `.attackHook` — opponent hooks at player
-    - `.attackUppercut` — opponent uppercuts at player
-  - **Opening actions** (opponent leaves a gap, player must exploit):
-    - `.openHead` — opponent drops face guard
-    - `.openBody` — opponent leaves torso exposed
-    - `.openSide` — opponent leaves flank exposed
-- `CounterMapping` — maps each `GameAction` to the correct `PunchType`:
-  - `.attackJab` → **Uppercut** (duck under the jab, counter upward)
-  - `.attackHook` → **Jab** (pull back, straight counter)
-  - `.attackUppercut` → **Hook** (pivot aside, swing counter)
-  - `.openHead` → **Jab** (fastest strike to exposed head)
-  - `.openBody` → **Uppercut** (strike exposed body from below)
-  - `.openSide` → **Hook** (swing into the exposed flank)
-  - Each punch type is the correct answer exactly **2 times** (once as a counter, once as an exploit)
-- `GameMessage` — no longer needed (was for MPC between iPhone and Mac)
+- `PunchType` — enum: `.jab`, `.hook`, `.uppercut` — the core game unit. Displayed directly to the player as the punch to throw.
+- ~~`GameAction`~~ — **Removed.** Originally had 6 attack/opening actions requiring counter-mapping. Replaced by displaying `PunchType` directly.
+- ~~`CounterMapping`~~ — **Removed.** No longer needed since the display shows the exact punch to throw.
 - `WatchMessage` — Codable enum for Watch ↔ iPhone messages:
   - `.motionData([MotionSample])` — Watch → iPhone: batch of raw motion samples
   - `.motionStarted` / `.motionStopped` — Watch → iPhone: lifecycle signals
   - `.startCapture` / `.stopCapture` — iPhone → Watch: control motion recording
   - `.punchDetected(PunchType, correct: Bool)` — iPhone → Watch: haptic feedback
-  - `.gameState(GameAction)` — iPhone → Watch: current prompt for minimal display
+  - `.gameState(PunchType)` — iPhone → Watch: current punch prompt for display
   - `.roundStart` / `.roundEnd` — iPhone → Watch: round lifecycle
 - `MotionSample` — struct: timestamp, accX, accY, accZ, rotX, rotY, rotZ
 - `Score` — struct: correctCount, totalCount, avgReactionTime, avgConfidence, totalPoints
 
-**Files to create:** `Shared/Models/PunchType.swift`, `GameAction.swift`, `PunchResult.swift`, `WatchMessage.swift`, `Shared/GameLogic/CounterMapping.swift`
+**Files to create:** `Shared/Models/PunchType.swift`, `PunchResult.swift`, `WatchMessage.swift`
 
 ---
 
@@ -103,7 +85,7 @@ Motion-controlled boxing reaction game. **Apple Watch** captures real punches vi
 - **iPhone → Watch messages:**
   - `.startCapture` / `.stopCapture` — control motion recording
   - `.punchDetected(PunchType, correct: Bool)` — feedback for Watch haptics
-  - `.gameState(GameAction)` — current prompt for minimal Watch display
+  - `.gameState(PunchType)` — current punch prompt for minimal Watch display
   - `.roundStart` / `.roundEnd` — round lifecycle
 - Both apps must be **active/foreground** for real-time messaging — enforce this in the UX flow
 - Fallback: if WCSession becomes unreachable mid-round, pause game
@@ -165,28 +147,35 @@ Motion-controlled boxing reaction game. **Apple Watch** captures real punches vi
 
 ### 4.1 SparringView (iPhone — the main game screen)
 - iPhone acts as the sparring partner display — placed on a stand/surface facing the player
-- Large center display showing current action as:
-  - Icon/symbol (e.g., fist icon for attacks, gap/opening icon for openings)
-  - Text label ("ATTACK — JAB", "OPENING — HEAD")
-  - Color coding (red = opponent attacking, green = opening to exploit)
+- Large center display showing the **punch type to throw** directly:
+  - Boxing figure icon (`figure.boxing`)
+  - Bold text label: "JAB", "HOOK", or "UPPERCUT" in red
+  - No attack/opening distinction — direct instruction
 - No directional left/right indicators (one-handed play)
 - Animated transitions between actions (scale + fade)
-- Timer bar showing remaining reaction window
+- Timer bar showing remaining reaction window (green → yellow → red countdown)
 - Punch feedback overlay: "JAB ✓" or "Wrong ✗" with brief flash
+- Timeout feedback: "TOO SLOW!" with clock icon
 - Score display: current score, streak, round number
+- Disconnect overlay: pauses game, shows reconnection prompt with option to end round
 
 ### 4.2 SparringViewModel
-- `RoundManager` generates a sequence of `GameAction`s per round
-  - Configurable: round length, action interval, difficulty (speed ramp)
-  - Randomized but balanced (mix of attacks and openings)
+- `RoundManager` generates a sequence of `PunchType`s per round
+  - Configurable: round length, action interval, difficulty (easy/normal/hard)
+  - Randomized but balanced (no 3+ consecutive same punch type)
 - Flow:
-  1. Display action on iPhone screen
-  2. Send `.gameState(GameAction)` to Watch for minimal display
-  3. Start reaction timer
-  4. Receive motion data from Watch → classify punch
-  5. `ScoringEngine` evaluates: correct counter? reaction time? confidence?
-  6. Send `.punchDetected(PunchType, correct)` to Watch for haptic
-  7. Update score + show feedback flash → next action
+  1. Display punch type on iPhone screen ("JAB", "HOOK", "UPPERCUT")
+  2. Send `.gameState(PunchType)` to Watch for minimal display
+  3. Start reaction timer with countdown bar
+  4. Receive motion data from Watch → two-stage ML pipeline (detect → classify)
+  5. Direct comparison: `thrownPunch == expectedPunch` (no counter-mapping)
+  6. `ScoringEngine` evaluates: correct? reaction time? confidence?
+  7. Send `.punchDetected(PunchType, correct)` to Watch for haptic
+  8. Sound effects: punch detected, correct/wrong, timeout, round complete
+  9. Update score + show feedback flash → next action
+- Timeout: if no punch within reaction window, record a miss and advance
+- Disconnect handling: pause game on Watch disconnect, resume on reconnect
+- ML inference runs on dedicated background queue (`com.boxedup.ml`)
 - Between rounds: show round summary
 
 ### 4.3 ScoringEngine (Shared)
@@ -198,9 +187,10 @@ Motion-controlled boxing reaction game. **Apple Watch** captures real punches vi
 - Aggregate stats per round: accuracy %, avg reaction time, total score
 
 ### 4.4 HomeView
-- Start button, settings (round count, difficulty, action interval)
 - Watch connection status indicator — must be connected before starting
-- Last session stats summary
+- **Difficulty picker** — segmented control (Easy / Normal / Hard) bound to `RoundManager.Config.Difficulty`
+- Start Round button (disabled when Watch not connected)
+- Collect Training Data button → enters data collection mode
 
 ### 4.5 ResultsView
 - Post-round breakdown: accuracy, avg speed, best/worst punch, total score
@@ -218,9 +208,8 @@ Motion-controlled boxing reaction game. **Apple Watch** captures real punches vi
 
 ### 5.2 WatchGameView
 - Minimal in-game display:
-  - Current action text (mirrored from iPhone: "JAB", "HOOK", etc.)
-  - Simple correct/wrong indicator
-  - Round number
+  - Boxing figure icon + current punch type text ("JAB", "HOOK", "UPPERCUT") in red
+  - Simple correct/wrong indicator (checkmark/xmark)
 - Haptic feedback on each punch detection (success/failure)
 - Keep screen awake during round via `HKWorkoutSession`
 

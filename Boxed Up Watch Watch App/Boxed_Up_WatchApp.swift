@@ -17,7 +17,7 @@ struct Boxed_Up_Watch_Watch_AppApp: App {
 
     enum WatchAppMode { case home, game, dataCollection }
     @State private var appMode: WatchAppMode = .home
-    @State private var currentAction: GameAction?
+    @State private var currentAction: PunchType?
     @State private var lastPunchCorrect: Bool?
     @State private var isDataCollectionRecording = false
 

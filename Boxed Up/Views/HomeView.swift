@@ -37,6 +37,21 @@ struct HomeView: View {
                     .foregroundStyle(viewModel.sessionManager.isWatchReachable ? .green : .red)
             }
 
+            // Difficulty selection
+            VStack(spacing: 8) {
+                Text("Difficulty")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+
+                Picker("Difficulty", selection: $viewModel.roundManager.config.difficulty) {
+                    ForEach(RoundManager.Config.Difficulty.allCases, id: \.self) { difficulty in
+                        Text(difficulty.rawValue.capitalized).tag(difficulty)
+                    }
+                }
+                .pickerStyle(.segmented)
+            }
+            .padding(.horizontal)
+
             Button {
                 viewModel.startRound()
             } label: {

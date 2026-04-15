@@ -14,7 +14,7 @@ class SparringViewModel {
 
     // MARK: - Dependencies
 
-    let roundManager = RoundManager()
+    var roundManager = RoundManager()
     let motionBuffer = MotionDataBuffer()
     let sessionManager: PhoneSessionManager
     private let classifier: PunchClassifierService?
@@ -67,8 +67,8 @@ class SparringViewModel {
         sessionManager.send(.roundStart)
         sessionManager.send(.startCapture)
 
-        if let action = roundManager.currentAction {
-            sessionManager.send(.gameState(action))
+        if let punch = roundManager.currentAction {
+            sessionManager.send(.gameState(punch))
         }
 
         startReactionTimeout()
@@ -98,7 +98,7 @@ class SparringViewModel {
 
     func processPunch() {
         guard isWaitingForPunch,
-              let action = roundManager.currentAction,
+              let expectedPunch = roundManager.currentAction,
               let reactionTime = roundManager.elapsedReactionTime,
               let window = motionBuffer.captureWindow() else { return }
 
@@ -107,7 +107,7 @@ class SparringViewModel {
         timeoutTask = nil
 
         let classifiedPunch = classifyPunch(from: window)
-        let correct = CounterMapping.isCorrect(punch: classifiedPunch.punchType, for: action)
+        let correct = classifiedPunch.punchType == expectedPunch
 
         let result = PunchResult(
             punchType: classifiedPunch.punchType,
@@ -256,8 +256,8 @@ class SparringViewModel {
         // Re-send current state to Watch
         sessionManager.send(.roundStart)
         sessionManager.send(.startCapture)
-        if let action = roundManager.currentAction {
-            sessionManager.send(.gameState(action))
+        if let punch = roundManager.currentAction {
+            sessionManager.send(.gameState(punch))
         }
 
         roundManager.resumeReactionTimer()
@@ -277,8 +277,8 @@ class SparringViewModel {
             endRound()
         } else {
             isWaitingForPunch = true
-            if let action = roundManager.currentAction {
-                sessionManager.send(.gameState(action))
+            if let punch = roundManager.currentAction {
+                sessionManager.send(.gameState(punch))
             }
             startReactionTimeout()
         }

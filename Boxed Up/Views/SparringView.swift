@@ -29,15 +29,15 @@ struct SparringView: View {
             Spacer()
 
             // Current action display
-            if let action = viewModel.roundManager.currentAction {
+            if let punch = viewModel.roundManager.currentAction {
                 VStack(spacing: 16) {
-                    Image(systemName: action.isAttack ? "exclamationmark.shield.fill" : "scope")
+                    Image(systemName: "figure.boxing")
                         .font(.system(size: 60))
-                        .foregroundStyle(action.isAttack ? .red : .green)
+                        .foregroundStyle(.red)
 
-                    Text(action.displayLabel)
-                        .font(.title.bold())
-                        .foregroundStyle(action.isAttack ? .red : .green)
+                    Text(punch.rawValue.uppercased())
+                        .font(.largeTitle.bold())
+                        .foregroundStyle(.red)
                 }
                 .transition(.scale.combined(with: .opacity))
                 .animation(.easeInOut(duration: 0.3), value: viewModel.roundManager.currentActionIndex)

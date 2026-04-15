@@ -9,19 +9,19 @@ import SwiftUI
 import WatchKit
 
 struct WatchGameView: View {
-    var currentAction: GameAction?
+    var currentAction: PunchType?
     var lastPunchCorrect: Bool?
 
     var body: some View {
         VStack(spacing: 8) {
-            if let action = currentAction {
-                Image(systemName: action.isAttack ? "exclamationmark.shield.fill" : "scope")
+            if let punch = currentAction {
+                Image(systemName: "figure.boxing")
                     .font(.system(size: 30))
-                    .foregroundStyle(action.isAttack ? .red : .green)
+                    .foregroundStyle(.red)
 
-                Text(action.displayLabel)
+                Text(punch.rawValue.uppercased())
                     .font(.caption.bold())
-                    .foregroundStyle(action.isAttack ? .red : .green)
+                    .foregroundStyle(.red)
                     .multilineTextAlignment(.center)
             } else {
                 Text("Get Ready…")

@@ -16,7 +16,7 @@ class WatchSessionManager: NSObject {
     private(set) var isSessionActivated: Bool = false
 
     /// Called when iPhone sends a game state update.
-    var onGameState: ((GameAction) -> Void)?
+    var onGameState: ((PunchType) -> Void)?
     /// Called when iPhone sends punch detection result (for haptic feedback).
     var onPunchDetected: ((PunchType, Bool) -> Void)?
     /// Called when iPhone requests to start/stop motion capture.
