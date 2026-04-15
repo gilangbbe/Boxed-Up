@@ -101,9 +101,15 @@ class PunchClassifierService {
         }
     }
 
-    /// Resets recurrent state (call between rounds).
+    /// Resets all recurrent state (call between rounds).
     func resetState() {
         classifierState = (try? MLMultiArray(shape: [NSNumber(value: Self.stateSize)], dataType: .double)) ?? classifierState
+        detectorState = (try? MLMultiArray(shape: [NSNumber(value: Self.stateSize)], dataType: .double)) ?? detectorState
+    }
+
+    /// Resets only the detector's recurrent state (call between actions).
+    /// Prevents the LSTM from carrying over a "punch detected" state into the next action.
+    func resetDetectorState() {
         detectorState = (try? MLMultiArray(shape: [NSNumber(value: Self.stateSize)], dataType: .double)) ?? detectorState
     }
 

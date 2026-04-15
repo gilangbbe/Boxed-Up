@@ -500,4 +500,37 @@ All 7 phases are now complete:
 
 ---
 
+## Entry 7 — Bug Fix: False Punch Re-detection After First Detection
+
+### Problem
+
+After the first punch was detected in a round, every subsequent action would immediately register a punch without the player actually throwing one — making the game unplayable.
+
+### Root Cause (two-fold)
+
+1. **Detector LSTM state carryover:** The PunchDetector uses an LSTM recurrent network. After detecting a punch, its hidden state (`detectorState`) retained the "punch" pattern. When new motion samples arrived for the next action, the detector's biased state immediately classified even idle/recovery motion as another punch.
+
+2. **Stale motion data in buffer:** `advanceAction()` called `motionBuffer.clearOldSamples()` which only trimmed the buffer to the last 50 samples — still containing the previous punch's motion data. The detector (25-sample window) would see this leftover punch motion and fire instantly.
+
+### Fix
+
+1. **Added `resetDetectorState()`** to `PunchClassifierService` — resets only the detector's LSTM hidden state to zeros. Unlike `resetState()` (which resets both models between rounds), this targets just the detector between actions so the classifier's LSTM context is preserved.
+
+2. **Full buffer reset between actions** — Changed `advanceAction()` to call `motionBuffer.reset()` (complete clear) instead of `motionBuffer.clearOldSamples()` (partial trim). The detector now starts each action with a clean buffer.
+
+Both fixes are called in `advanceAction()` before the next action begins.
+
+### Files modified
+
+| File | Changes |
+|------|---------|
+| `Boxed Up/MLClassifier/PunchClassifierService.swift` | Added `resetDetectorState()` method |
+| `Boxed Up/ViewModels/SparringViewModel.swift` | `advanceAction()`: replaced `clearOldSamples()` with `reset()` + `resetDetectorState()` |
+
+### Build result
+
+iOS target builds successfully.
+
+---
+
 *End of journal. Update this file after every implementation session.*

@@ -210,7 +210,7 @@ class SparringViewModel {
                     let allSamples = self.motionBuffer.allSamples
                     self.mlQueue.async { [weak self] in
                         let detection = classifier.detectPunch(from: allSamples)
-                        if detection.isPunch && detection.confidence > 0.6 {
+                        if detection.isPunch && detection.confidence > 0.9 {
                             Task { @MainActor in
                                 self?.processPunch()
                             }
@@ -266,7 +266,8 @@ class SparringViewModel {
     }
 
     private func advanceAction() {
-        motionBuffer.clearOldSamples()
+        motionBuffer.reset()
+        classifier?.resetDetectorState()
         lastPunchResult = nil
         lastPunchCorrect = nil
 
