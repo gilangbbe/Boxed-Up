@@ -533,4 +533,79 @@ iOS target builds successfully.
 
 ---
 
+## Entry 8 — ML Architecture Change: CreateML Activity Classifier → CNN 1D
+
+**Branch:** `feature/cnn-models`
+
+### Problem
+
+The CreateML `MLActivityClassifier` models (LSTM-based) suffered from two issues:
+1. **Overfitting** — The Activity Classifier architecture overfitted on the limited training data (50 sessions/label). Validation error was 50% for the classifier and 29.5% for the detector.
+2. **LSTM state carryover** — The recurrent hidden state caused false re-detections between actions (fixed in Entry 7 with state resets, but was a fundamental architecture problem).
+
+### Solution
+
+Retrained both models using **1D Convolutional Neural Networks (CNN 1D)** via PyTorch → CoreML conversion (coremltools). CNN 1D generalizes better on small motion datasets because:
+- Stateless — no recurrent hidden state to manage or leak between predictions
+- Translation-invariant — learns local temporal patterns (punch signatures) regardless of position in the window
+- Less prone to overfitting with limited data than LSTMs
+
+### New models
+
+| Model | File | Input | Output | Architecture |
+|-------|------|-------|--------|-------------|
+| PunchClassifier_CNN | `MLModels/PunchClassifier_CNN.mlmodel` | `motionData` Float32 [1, 6, 50] | `classLabel` (jab/hook/uppercut) + `var_84` probabilities | 3× Conv1D + ReLU + GlobalAvgPool + FC |
+| PunchDetector_CNN | `MLModels/PunchDetector_CNN.mlmodel` | `motionData` Float32 [1, 6, 25] | `classLabel` (punch/other) + `var_83` probabilities | 3× Conv1D + ReLU + GlobalAvgPool + FC |
+
+**Key differences from old models:**
+
+| Aspect | Old (CreateML Activity Classifier) | New (CNN 1D) |
+|--------|-----------------------------------|-------------|
+| Architecture | LSTM (recurrent) | Conv1D (stateless) |
+| Input format | 6 separate MLMultiArrays + stateIn | Single [1, 6, windowSize] tensor |
+| Output names | `label`, `labelProbability`, `stateOut` | `classLabel`, `var_84`/`var_83` |
+| State management | Requires manual LSTM state passing + reset | None needed |
+| Data type | Float64 (Double) | Float32 |
+| Framework | CreateML native | PyTorch → coremltools conversion |
+| Overfitting risk | High (LSTM on small data) | Lower (CNN generalizes better) |
+
+### Changes to `PunchClassifierService.swift`
+
+Complete rewrite of the service to accommodate the CNN architecture:
+
+1. **Removed all LSTM state management** — No more `classifierState`, `detectorState`, `stateSize` properties
+2. **Simplified init** — Loads `PunchClassifier_CNN.mlmodelc` and `PunchDetector_CNN.mlmodelc` (no state arrays to allocate)
+3. **New `buildCNNInput()` method** — Packs 6-channel motion data into a single `[1, 6, windowSize]` Float32 MLMultiArray using 3D indexed access (`motionData[[0, channel, timeStep]]`)
+4. **Updated output parsing** — Reads `classLabel` instead of `label`, reads `var_84`/`var_83` instead of `labelProbability`
+5. **`resetState()` and `resetDetectorState()` are now no-ops** — Kept for API compatibility with `SparringViewModel` calls, but CNN models have no state to reset
+
+### Files modified
+
+| File | Changes |
+|------|---------|
+| `Boxed Up/MLClassifier/PunchClassifierService.swift` | Full rewrite: removed LSTM state, single-tensor CNN input, updated output names |
+
+### Files unchanged (API stable)
+
+- `SparringViewModel.swift` — No changes needed. Calls to `resetState()` and `resetDetectorState()` still work (no-ops). The `detectPunch(from:)` and `classifyPunch(from:)` APIs are unchanged.
+
+### New model files
+
+| File | Size | Source |
+|------|------|--------|
+| `MLModels/PunchClassifier_CNN.mlmodel` | — | PyTorch Conv1D → coremltools |
+| `MLModels/PunchDetector_CNN.mlmodel` | — | PyTorch Conv1D → coremltools |
+
+### Build result
+
+Both targets (iOS and watchOS) build successfully.
+
+### Xcode manual steps
+
+- Drag `MLModels/PunchClassifier_CNN.mlmodel` and `MLModels/PunchDetector_CNN.mlmodel` into the iOS target in Xcode
+- Ensure both have target membership in "Boxed Up" (iOS) only
+- The old `PunchClassifier.mlmodel` and `PunchDetector.mlmodel` can be removed from the iOS target (kept in repo for reference on main branch)
+
+---
+
 *End of journal. Update this file after every implementation session.*

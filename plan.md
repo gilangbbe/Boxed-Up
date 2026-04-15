@@ -290,29 +290,22 @@ Motion-controlled boxing reaction game. **Apple Watch** captures real punches vi
 
 | Parameter | Value |
 |-----------|-------|
-| Framework | Create ML `MLActivityClassifier` |
-| Input | 6-channel time series (accX/Y/Z + rotX/Y/Z) at 50 Hz |
+| Framework | ~~CreateML `MLActivityClassifier`~~ → **PyTorch Conv1D → coremltools** |
+| Input | Single `motionData` Float32 tensor [1, 6, 50] — 6 channels × 50 time steps |
 | Prediction window | 50 samples (1.0 second) |
 | Classes | 3: jab, hook, uppercut |
-| Output | PunchType + confidence (0.0–1.0) |
+| Output | `classLabel` + probability dictionary |
+| Model file | `PunchClassifier_CNN.mlmodel` |
 
-**Why Activity Classifier:**
-- Purpose-built for motion sensor time series
-- Temporal pattern recognition (LSTM/CNN backend)
-- Native Core ML integration — drop `.mlmodel` into Xcode
-- Optimized for on-device inference
+**Why CNN 1D (replaces Activity Classifier):**
+- **Better generalization** — CreateML Activity Classifier (LSTM) overfitted on limited training data (50% validation error). CNN 1D generalizes significantly better.
+- **Stateless** — No recurrent state to manage between predictions, eliminating the LSTM state carryover bug that caused false re-detections.
+- **Translation-invariant** — Learns local temporal punch patterns regardless of position in window.
+- **Simpler input** — Single [1, 6, windowSize] tensor instead of 6 separate arrays + hidden state.
 
-**Training (Create ML app or Swift Playground):**
-```swift
-let classifier = try MLActivityClassifier(
-    trainingData: .labeledDirectories(at: trainingURL),
-    featureColumns: ["accX", "accY", "accZ", "rotX", "rotY", "rotZ"],
-    parameters: .init(predictionWindowSize: 50)
-)
-try classifier.write(to: URL(fileURLWithPath: "PunchClassifier.mlmodel"))
-```
+**Architecture:** 3× Conv1D layers (increasing channels) + ReLU activations + Global Average Pooling + Fully Connected classifier.
 
-**Integration:** Replace the `classifyPunch()` placeholder in `SparringViewModel` with actual Core ML inference via a `PunchClassifier` wrapper.
+**Integration:** `PunchClassifierService` wraps the CNN model, builds the [1, 6, 50] input tensor from `MotionSample` arrays.
 
 ### Model 2: Punch Detector (Recommended — Replaces Threshold)
 
@@ -320,11 +313,12 @@ try classifier.write(to: URL(fileURLWithPath: "PunchClassifier.mlmodel"))
 
 | Parameter | Value |
 |-----------|-------|
-| Framework | Create ML `MLActivityClassifier` |
-| Input | Same 6-channel data at 50 Hz |
+| Framework | ~~CreateML `MLActivityClassifier`~~ → **PyTorch Conv1D → coremltools** |
+| Input | Single `motionData` Float32 tensor [1, 6, 25] — 6 channels × 25 time steps |
 | Prediction window | 25 samples (0.5 second) — smaller for faster detection |
 | Classes | 2: punch, other |
-| Output | Binary classification + confidence |
+| Output | `classLabel` + probability dictionary |
+| Model file | `PunchDetector_CNN.mlmodel` |
 
 **Why separate from Model 1:**
 - Smaller window → faster detection → more precise reaction time measurement
@@ -336,16 +330,7 @@ try classifier.write(to: URL(fileURLWithPath: "PunchClassifier.mlmodel"))
 - "punch" class: **All** jab + hook + uppercut recordings combined
 - "other" class: All recordings labeled "other"
 
-**Training:**
-```swift
-// Restructure: merge jab/hook/uppercut folders into a single "punch" folder
-let detector = try MLActivityClassifier(
-    trainingData: .labeledDirectories(at: detectorTrainingURL),
-    featureColumns: ["accX", "accY", "accZ", "rotX", "rotY", "rotZ"],
-    parameters: .init(predictionWindowSize: 25)
-)
-try detector.write(to: URL(fileURLWithPath: "PunchDetector.mlmodel"))
-```
+**Training:** Both CNN models trained via PyTorch, converted to Core ML using coremltools. See `TrainModels.swift` for the CreateML version (kept for reference on main branch).
 
 ### Model 3: Punch Quality Estimator (Future / Optional)
 
@@ -444,7 +429,7 @@ Phase 7 (Integration) — depends on all above
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
 | Communication | WatchConnectivity only | Single framework, no MPC/server needed — Watch and iPhone are always paired |
-| ML approach | Create ML Activity Classifier | Native Apple tooling, optimized for CoreMotion data, easy Core ML integration |
+| ML approach | ~~CreateML Activity Classifier~~ → **PyTorch CNN 1D** | CNN 1D generalizes better than LSTM on limited data, stateless (no state carryover bugs), converted via coremltools |
 | ML model location | iPhone | More processing power than Watch; Watch sends raw data, iPhone classifies |
 | Project structure | Single project, two targets (iOS + watchOS) | Shared code via target membership, simpler dependency management |
 | Game display | iPhone screen | Acts as both sparring partner display and score board — placed on stand facing player |
