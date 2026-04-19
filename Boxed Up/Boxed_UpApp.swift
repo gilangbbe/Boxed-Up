@@ -13,16 +13,19 @@ struct Boxed_UpApp: App {
     @State private var viewModel: SparringViewModel?
     @State private var dataCollectionViewModel: DataCollectionViewModel?
     @State private var isDataCollectionMode = false
+    @State private var isGloveTestMode = false
 
     var body: some Scene {
         WindowGroup {
             if let viewModel {
-                if isDataCollectionMode, let dcViewModel = dataCollectionViewModel {
+                if isGloveTestMode {
+                    GloveTestView(onDone: { isGloveTestMode = false })
+                } else if isDataCollectionMode, let dcViewModel = dataCollectionViewModel {
                     DataCollectionView(viewModel: dcViewModel, onDone: exitDataCollection)
                 } else {
                     switch viewModel.gamePhase {
                     case .home:
-                        HomeView(viewModel: viewModel, onCollectData: enterDataCollection)
+                        HomeView(viewModel: viewModel, onCollectData: enterDataCollection, onTestGlove: { isGloveTestMode = true })
                     case .playing:
                         SparringView(viewModel: viewModel)
                     case .results:

@@ -10,6 +10,7 @@ import SwiftUI
 struct HomeView: View {
     @Bindable var viewModel: SparringViewModel
     var onCollectData: () -> Void
+    var onTestGlove: () -> Void
 
     var body: some View {
         VStack(spacing: 30) {
@@ -75,6 +76,19 @@ struct HomeView: View {
                     .padding(.vertical, 12)
                     .background(.blue.opacity(0.1))
                     .foregroundStyle(.blue)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+            }
+            .padding(.horizontal)
+
+            Button {
+                onTestGlove()
+            } label: {
+                Label("Test Smart Glove", systemImage: "hand.raised.fingers.spread")
+                    .font(.subheadline)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(.orange.opacity(0.1))
+                    .foregroundStyle(.orange)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
             }
             .padding(.horizontal)

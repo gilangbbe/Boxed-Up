@@ -695,4 +695,208 @@ Updated the project plan to reflect the current architecture:
 
 ---
 
+## Entry 10 — Phase 8 Planning: DIY Smart Glove (ESP32 + MPU6050)
+
+### Motivation
+
+The Apple Watch only tracks one hand. To enable dual-hand features like punching combos (e.g., L-JAB → R-HOOK → L-UPPERCUT), the other hand needs a motion sensor too. Solution: a DIY smart glove built with student-accessible IoT components that streams the same 6-axis IMU data to the iPhone over BLE.
+
+### Hardware Design
+
+**Components (~$15–25 USD total):**
+
+| Component | Model | Purpose |
+|-----------|-------|---------|
+| Microcontroller | ESP32-WROOM-32 DevKit V1 (30-pin) | BLE communication + IMU host. ~$5–8. |
+| IMU sensor | MPU6050 (GY-521 breakout) | 6-axis accelerometer + gyroscope. Matches Watch's 6 channels. ~$2–3. |
+| Battery | 3.7V LiPo 500mAh | ~2–3 hours runtime. Rechargeable. ~$3–5. |
+| Charger | TP4056 USB-C module | Charges LiPo with overcurrent/overdischarge protection. ~$1–2. |
+| Switch | SPDT slide switch | Power on/off. ~$0.50. |
+| Glove | Fingerless workout glove | Mount electronics on back of wrist. ~$3–5. |
+| Mounting | Velcro strips + zip ties | Secure and removable for charging. ~$1–2. |
+
+**Wiring (6 connections):**
+- MPU6050 VCC → ESP32 3V3, GND → GND, SDA → GPIO21, SCL → GPIO22, INT → GPIO19, AD0 → GND
+- Power: LiPo → TP4056 (charge + protect) → slide switch → ESP32 VIN
+
+### Firmware
+
+Arduino IDE sketch on ESP32:
+- Initializes MPU6050 at ±8g accel / ±1000°/s gyro with 42 Hz low-pass filter
+- Calibrates at boot (averages 100 rest samples, subtracts bias offsets)
+- BLE peripheral advertising as `"BoxedUpGlove"` with custom GATT service
+- Notify characteristic streams 5-sample batches at 50 Hz (140 bytes per notification)
+- Control characteristic accepts write commands to start/stop capture
+- Binary packet format per sample: `[timestamp_ms(4) + accXYZ(12) + rotXYZ(12)]` = 28 bytes Float32
+
+### iPhone Integration Plan
+
+- New `GloveSessionManager` using CoreBluetooth (mirrors `PhoneSessionManager` API)
+- Scans for `"BoxedUpGlove"`, connects, subscribes to motion notifications
+- Parses binary packets into existing `MotionSample` structs
+- Separate `MotionDataBuffer` for left hand
+- Same CNN ML pipeline applied to left-hand data (separate trained models)
+- `Info.plist` needs `NSBluetoothAlwaysUsageDescription`
+
+### New Game Mode: Combo
+
+Dual-hand tracking enables combo sequences:
+- Display: `L-JAB → R-HOOK → L-UPPERCUT` (hand + punch type sequence)
+- Player executes in order, each punch validated independently
+- Combo scoring: all-correct bonus + rhythm bonus + speed bonus
+- New models: `HandSide` enum, `ComboAction` struct, `ComboManager` class
+- HomeView gains game mode picker: Single Hand / Combo
+
+### Updated plan.md
+
+Added comprehensive Phase 8 to `plan.md`:
+- Section 8.1: Full component list with prices and sourcing
+- Section 8.2: Detailed wiring diagram (ASCII) with pin-by-pin table
+- Section 8.3: Step-by-step assembly (breadboard → perfboard → glove mount) with layout diagram
+- Section 8.4: Complete ESP32 Arduino firmware sketch with BLE GATT, MPU6050 reading, calibration, batched notify
+- Section 8.5: iPhone CoreBluetooth architecture diagram, new files, binary packet parsing code
+- Section 8.6: Dual-hand data collection extension
+- Section 8.7: Dual-hand ML strategy (separate models per hand vs unified 12-channel)
+- Section 8.8: Combo game mode design (sequences, scoring, UI, new types)
+- Section 8.9: Latency budget (~25–50ms glove path)
+- Section 8.10: Info.plist BLE permissions
+- Section 8.11: Calibration & axis alignment guide
+- Updated dependency graph, key decisions table, verification plan (6 new steps), and risks table (8 new risks)
+
+## Entry 11 — Phase 8.5: Smart Glove BLE Integration & Motion Sensor Testing
+
+**Date:** 2025-04-13  
+**Phase:** 8 — DIY Smart Glove (BLE Testing)
+
+### Context
+
+ESP32 + MPU6050 hardware was assembled on breadboard and firmware uploaded. BLE connectivity was verified successfully using nRF Connect app — the `BoxedUpGlove` peripheral advertises, connects, and its GATT service/characteristics are visible. Next step: test the actual MPU6050 motion data streaming through the iPhone app before committing to soldering on a permanent board.
+
+### What Was Done
+
+1. **Created `BLERelay/GloveConstants.swift`** — Centralized BLE UUID definitions and binary packet format constants matching the ESP32 firmware (`BoxedUp.ino`). Service UUID, motion/control characteristic UUIDs, bytes-per-sample (28), batch size (5), start/stop command bytes.
+
+2. **Created `BLERelay/GloveSessionManager.swift`** — Full CoreBluetooth `CBCentralManager` + `CBPeripheralDelegate` implementation:
+   - Scans for `BoxedUpGlove` service UUID
+   - Auto-connects on discovery, subscribes to motion notify characteristic
+   - Parses 140-byte binary BLE packets into `[MotionSample]` arrays (little-endian Float32)
+   - `startCapture()` / `stopCapture()` write control commands to the ESP32
+   - Auto-reconnect on disconnect
+   - `@Observable` with `isGloveConnected`, `isScanning`, `onMotionData` callback
+   - Mirrors the `PhoneSessionManager` API pattern for consistency
+
+3. **Created `Views/GloveTestView.swift`** — Dedicated debug/test view for verifying sensor data:
+   - Connection section: Scan button with progress indicator, connection status
+   - Capture control: Start/Stop streaming toggle
+   - Live IMU data: Real-time 6-axis display (acc X/Y/Z in g, gyro X/Y/Z in °/s), acceleration magnitude with threshold coloring (>1.5g turns red)
+   - Stream stats: Total samples, sample rate (Hz), batch count, streaming status
+   - Clean lifecycle: stops capture and scanning on dismiss
+
+4. **Wired into app navigation:**
+   - `Boxed_UpApp.swift`: Added `isGloveTestMode` state, routes to `GloveTestView` when active
+   - `HomeView.swift`: Added "Test Smart Glove" button (orange, with hand icon) alongside existing "Collect Training Data" button
+
+5. **Added BLE permission** — `NSBluetoothAlwaysUsageDescription` added to both Debug and Release build settings in `project.pbxproj` for the iOS target.
+
+### New Files
+
+| File | Purpose |
+|------|---------|
+| `Boxed Up/BLERelay/GloveConstants.swift` | BLE UUIDs, packet format constants |
+| `Boxed Up/BLERelay/GloveSessionManager.swift` | CoreBluetooth BLE manager for ESP32 glove |
+| `Boxed Up/Views/GloveTestView.swift` | Debug UI for testing motion sensor data |
+
+### Modified Files
+
+| File | Change |
+|------|--------|
+| `Boxed_UpApp.swift` | Added `isGloveTestMode` state and `GloveTestView` routing |
+| `Views/HomeView.swift` | Added `onTestGlove` callback and "Test Smart Glove" button |
+| `project.pbxproj` | Added `NSBluetoothAlwaysUsageDescription` to iOS target |
+
+### Testing Plan
+
+1. Build and run on physical iPhone (BLE requires real device, not simulator)
+2. Power on ESP32 breadboard setup
+3. Open app → tap "Test Smart Glove" → tap "Scan for Glove"
+4. Verify connection established (green indicator)
+5. Tap "Start Capture" → verify sample rate shows ~50 Hz
+6. Move the MPU6050 sensor — verify live acc/gyro values change responsively
+7. Throw test punches — verify acceleration magnitude spikes above 1.5g threshold
+8. Tap "Stop Capture" → verify streaming stops cleanly
+9. If data looks good → proceed with soldering to permanent board
+
+### Key Decisions
+
+- **Separate test view** rather than integrating into existing DataCollectionView — keeps glove testing isolated and simple for hardware debugging
+- **`@State var gloveManager`** created locally in GloveTestView — lifecycle tied to the view. Will be elevated to app-level when integrating into the game flow later
+- **Auto-reconnect on disconnect** — important for breadboard testing where connections may be flaky
+- **Binary packet parsing** uses safe `Data` slicing with `withUnsafeBytes` + `loadUnaligned` — handles potential alignment issues
+
+## Entry 12 — MPU6050 Sensor Diagnostic Tool
+
+**Date:** 2025-04-19  
+**Phase:** 8 — DIY Smart Glove (Hardware Debug)
+
+### Problem
+
+After uploading the main `BoxedUp.ino` firmware and testing BLE from the iPhone app, the motion sensor produced no data. BLE connects successfully (confirmed via nRF Connect in Entry 10), but the MPU6050 IMU may be improperly wired or defective. Need a way to isolate whether the issue is wiring, sensor, or firmware.
+
+### What Was Done
+
+Created `ESPFirmware/SensorDiagnostic.ino` — a standalone diagnostic sketch that runs 7 progressive hardware tests via Serial Monitor (115200 baud). No BLE, no library dependencies beyond `Wire.h`.
+
+### Diagnostic Tests
+
+| Test | What It Checks | Failure Means |
+|------|---------------|---------------|
+| 1. I2C Bus Init | Wire.begin on GPIO21/22 | Pins misconfigured |
+| 2. I2C Bus Scan | Scans all 127 addresses | No device = wiring problem (VCC/GND/SDA/SCL) |
+| 3. WHO_AM_I | Reads register 0x75, expects 0x68 | Wrong device or dead sensor |
+| 4. Power Management | Checks sleep bit, wakes sensor if needed | Sensor stuck in sleep mode |
+| 5. Configuration | Sets ±8g/±1000°/s, reads back | Register write failure |
+| 6. I2C Stability | 20 rapid WHO_AM_I reads | Intermittent = loose wire or bad solder |
+| 7. Raw Data Sanity | 10 samples: gravity ~1g? Gyro near 0? Values vary? | Stuck/dead sensor, wrong axis, frozen registers |
+
+After tests complete, streams continuous formatted data at 10 Hz:
+```
+A: +0.012 -0.034 +1.002 | G:   +1.23   -0.45   +0.78 | 1.003g
+A: +0.015 -0.031 +0.998 | G:   +1.12   -0.52   +0.81 | 0.999g  << motion
+A: +1.234 +0.567 +2.345 | G: +245.12  -123.45  +89.01 | 2.723g  <<<< IMPACT!
+```
+
+### Troubleshooting Guide (printed on failure)
+
+If **Test 2 fails** (no I2C device found):
+1. VCC → ESP32 3V3 (not 5V)
+2. GND → ESP32 GND
+3. SDA → GPIO21
+4. SCL → GPIO22
+5. Check for loose jumper wires / bad breadboard rows
+6. Check for bent pins on GY-521 module
+7. Measure 3.3V on MPU6050 VCC with multimeter
+
+If **Test 3 returns 0xFF/0x00**: sensor is likely dead — try a replacement module.
+
+If **Test 6 has intermittent failures**: loose connection — reseat all jumper wires.
+
+If **Test 7 gravity ≈ 0**: sensor registers respond but IMU core is non-functional — replace module.
+
+### How to Use
+
+1. Open Arduino IDE, load `ESPFirmware/SensorDiagnostic.ino`
+2. Select ESP32 board + correct port
+3. Upload (replaces BoxedUp.ino temporarily)
+4. Open Serial Monitor at 115200 baud
+5. Read through test results — first failure points to the problem
+6. Once sensor works, re-upload `BoxedUp.ino`
+
+### New Files
+
+| File | Purpose |
+|------|---------|
+| `ESPFirmware/SensorDiagnostic.ino` | Standalone MPU6050 hardware diagnostic sketch |
+
+---
+
 *End of journal. Update this file after every implementation session.*
