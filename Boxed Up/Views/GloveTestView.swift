@@ -26,19 +26,25 @@ struct GloveTestView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 20) {
-                    connectionSection
-                    if gloveManager.isGloveConnected {
-                        captureControlSection
-                        liveDataSection
-                        statsSection
+            ZStack {
+                Color(red: 0.05, green: 0.05, blue: 0.07).ignoresSafeArea()
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: 16) {
+                        connectionSection
+                        if gloveManager.isGloveConnected {
+                            captureControlSection
+                            liveDataSection
+                            statsSection
+                        }
                     }
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 12)
                 }
-                .padding()
             }
             .navigationTitle("Glove Sensor Test")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(Color(red: 0.05, green: 0.05, blue: 0.07), for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Done") {
@@ -47,6 +53,7 @@ struct GloveTestView: View {
                         rateTimer?.invalidate()
                         onDone()
                     }
+                    .foregroundStyle(.red)
                 }
             }
             .onAppear { setupCallbacks() }
@@ -56,60 +63,68 @@ struct GloveTestView: View {
                 rateTimer?.invalidate()
             }
         }
+        .preferredColorScheme(.dark)
     }
 
     // MARK: - Connection Section
 
     private var connectionSection: some View {
         VStack(spacing: 12) {
-            HStack {
-                Image(systemName: gloveManager.isGloveConnected
-                      ? "hand.raised.fingers.spread.fill" : "hand.raised.slash.fill")
-                    .font(.title2)
-                    .foregroundStyle(gloveManager.isGloveConnected ? .green : .red)
-
-                VStack(alignment: .leading) {
-                    Text(gloveManager.isGloveConnected
-                         ? "Glove Connected" : "Glove Not Connected")
-                        .font(.headline)
+            HStack(spacing: 12) {
+                ZStack {
+                    Circle()
+                        .fill((gloveManager.isGloveConnected ? Color.green : Color.red).opacity(0.15))
+                        .frame(width: 46, height: 46)
+                    Image(systemName: gloveManager.isGloveConnected
+                          ? "hand.raised.fingers.spread.fill" : "hand.raised.slash.fill")
+                        .font(.system(size: 20))
                         .foregroundStyle(gloveManager.isGloveConnected ? .green : .red)
-
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(gloveManager.isGloveConnected ? "Glove Connected" : "Glove Not Connected")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(gloveManager.isGloveConnected ? .green : .red)
                     if let name = gloveManager.peripheralName {
                         Text(name)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .font(.system(size: 12))
+                            .foregroundStyle(Color(white: 0.45))
                     }
                 }
                 Spacer()
+                Circle()
+                    .fill(gloveManager.isGloveConnected ? Color.green : Color.red)
+                    .frame(width: 8, height: 8)
             }
 
             if !gloveManager.isGloveConnected {
                 Button {
-                    if gloveManager.isScanning {
-                        gloveManager.stopScanning()
-                    } else {
-                        gloveManager.startScanning()
-                    }
+                    if gloveManager.isScanning { gloveManager.stopScanning() }
+                    else { gloveManager.startScanning() }
                 } label: {
-                    HStack {
+                    HStack(spacing: 8) {
                         if gloveManager.isScanning {
-                            ProgressView()
-                                .controlSize(.small)
-                                .tint(.white)
+                            ProgressView().controlSize(.small).tint(.white)
+                        } else {
+                            Image(systemName: "dot.radiowaves.left.and.right").font(.system(size: 14))
                         }
-                        Text(gloveManager.isScanning ? "Scanning..." : "Scan for Glove")
+                        Text(gloveManager.isScanning ? "Scanning for Glove..." : "Scan for Glove")
+                            .font(.system(size: 15, weight: .semibold))
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(gloveManager.isScanning ? .orange : .blue)
                     .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity).frame(height: 48)
+                    .background(
+                        gloveManager.isScanning
+                            ? Color(red: 1, green: 0.55, blue: 0.1)
+                            : Color(red: 0.2, green: 0.5, blue: 1.0)
+                    )
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
             }
         }
-        .padding()
-        .background(.ultraThinMaterial)
+        .padding(16)
+        .background(Color(white: 0.10))
         .clipShape(RoundedRectangle(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color(white: 0.14), lineWidth: 1))
     }
 
     // MARK: - Capture Control
@@ -122,92 +137,109 @@ struct GloveTestView: View {
                 rateTimer?.invalidate()
                 rateTimer = nil
             } else {
-                sampleCount = 0
-                samplesPerSecond = 0
-                samplesThisSecond = 0
-                recentSamples = []
-                latestSample = nil
+                sampleCount = 0; samplesPerSecond = 0; samplesThisSecond = 0
+                recentSamples = []; latestSample = nil
                 gloveManager.startCapture()
                 isCapturing = true
                 startRateTimer()
             }
         } label: {
-            HStack {
+            HStack(spacing: 10) {
                 Image(systemName: isCapturing ? "stop.circle.fill" : "play.circle.fill")
-                    .font(.title2)
-                Text(isCapturing ? "Stop Capture" : "Start Capture")
-                    .font(.headline)
+                    .font(.system(size: 18))
+                Text(isCapturing ? "STOP CAPTURE" : "START CAPTURE")
+                    .font(.system(size: 15, weight: .bold)).tracking(1)
             }
-            .frame(maxWidth: .infinity)
-            .padding()
-            .background(isCapturing ? .red : .green)
             .foregroundStyle(.white)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .frame(maxWidth: .infinity).frame(height: 52)
+            .background(
+                LinearGradient(
+                    colors: isCapturing
+                        ? [Color.red.opacity(0.9), Color.red.opacity(0.75)]
+                        : [Color(red: 0.15, green: 0.75, blue: 0.35),
+                           Color(red: 0.05, green: 0.60, blue: 0.25)],
+                    startPoint: .topLeading, endPoint: .bottomTrailing)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .shadow(color: (isCapturing ? Color.red : Color.green).opacity(0.35), radius: 8, y: 3)
         }
     }
 
     // MARK: - Live Data Display
 
     private var liveDataSection: some View {
-        VStack(spacing: 12) {
-            Text("Live IMU Data")
-                .font(.headline)
+        VStack(spacing: 14) {
+            HStack {
+                Text("LIVE IMU DATA")
+                    .font(.system(size: 10, weight: .bold)).tracking(2)
+                    .foregroundStyle(Color(white: 0.38))
+                Spacer()
+                if isCapturing {
+                    HStack(spacing: 4) {
+                        Circle().fill(Color.green).frame(width: 6, height: 6)
+                        Text("LIVE").font(.system(size: 10, weight: .bold)).tracking(1)
+                            .foregroundStyle(.green)
+                    }
+                }
+            }
 
             if let sample = latestSample {
-                VStack(spacing: 8) {
-                    Text("Accelerometer (g)")
-                        .font(.subheadline.bold())
+                VStack(spacing: 10) {
+                    Text("ACCELEROMETER (g)")
+                        .font(.system(size: 9, weight: .bold)).tracking(1.5)
+                        .foregroundStyle(Color(white: 0.38))
                         .frame(maxWidth: .infinity, alignment: .leading)
-
-                    HStack(spacing: 16) {
+                    HStack(spacing: 8) {
                         axisView(label: "X", value: sample.accX, color: .red)
                         axisView(label: "Y", value: sample.accY, color: .green)
                         axisView(label: "Z", value: sample.accZ, color: .blue)
                     }
 
-                    Text("Gyroscope (°/s)")
-                        .font(.subheadline.bold())
+                    Text("GYROSCOPE (°/s)")
+                        .font(.system(size: 9, weight: .bold)).tracking(1.5)
+                        .foregroundStyle(Color(white: 0.38))
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.top, 4)
-
-                    HStack(spacing: 16) {
+                    HStack(spacing: 8) {
                         axisView(label: "X", value: sample.rotX, color: .red)
                         axisView(label: "Y", value: sample.rotY, color: .green)
                         axisView(label: "Z", value: sample.rotZ, color: .blue)
                     }
 
-                    Divider()
+                    Rectangle().fill(Color(white: 0.14)).frame(height: 1).padding(.vertical, 2)
 
                     HStack {
                         Text("Accel Magnitude")
-                            .font(.subheadline)
+                            .font(.system(size: 13)).foregroundStyle(Color(white: 0.55))
                         Spacer()
                         Text(String(format: "%.3f g", sample.accelerationMagnitude))
-                            .font(.title3.bold().monospacedDigit())
-                            .foregroundStyle(sample.accelerationMagnitude > 1.5 ? .red : .primary)
+                            .font(.system(size: 18, weight: .bold).monospacedDigit())
+                            .foregroundStyle(sample.accelerationMagnitude > 1.5 ? .red : .white)
                     }
                 }
-            } else if isCapturing {
-                Text("Waiting for data...")
-                    .foregroundStyle(.secondary)
             } else {
-                Text("Tap Start Capture to begin")
-                    .foregroundStyle(.secondary)
+                Text(isCapturing ? "Waiting for data..." : "Tap Start Capture to begin")
+                    .font(.system(size: 13)).foregroundStyle(Color(white: 0.38))
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, 20)
             }
         }
-        .padding()
-        .background(.ultraThinMaterial)
+        .padding(16)
+        .background(Color(white: 0.10))
         .clipShape(RoundedRectangle(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color(white: 0.14), lineWidth: 1))
     }
 
     // MARK: - Stats Section
 
     private var statsSection: some View {
         VStack(spacing: 12) {
-            Text("Stream Stats")
-                .font(.headline)
+            Text("STREAM STATS")
+                .font(.system(size: 10, weight: .bold)).tracking(2)
+                .foregroundStyle(Color(white: 0.38))
+                .frame(maxWidth: .infinity, alignment: .leading)
 
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
                 statCard(title: "Samples", value: "\(sampleCount)", icon: "number")
                 statCard(title: "Sample Rate", value: String(format: "%.0f Hz", samplesPerSecond), icon: "waveform")
                 statCard(title: "Batches", value: "\(sampleCount / max(GloveConstants.batchSize, 1))", icon: "shippingbox")
@@ -215,43 +247,44 @@ struct GloveTestView: View {
                          icon: isCapturing ? "antenna.radiowaves.left.and.right" : "pause.circle")
             }
         }
-        .padding()
-        .background(.ultraThinMaterial)
+        .padding(16)
+        .background(Color(white: 0.10))
         .clipShape(RoundedRectangle(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color(white: 0.14), lineWidth: 1))
     }
 
     // MARK: - Helper Views
 
     private func axisView(label: String, value: Double, color: Color) -> some View {
-        VStack(spacing: 2) {
+        VStack(spacing: 3) {
             Text(label)
-                .font(.caption.bold())
-                .foregroundStyle(color)
+                .font(.system(size: 10, weight: .bold)).foregroundStyle(color)
             Text(String(format: "%+.3f", value))
-                .font(.system(.body, design: .monospaced))
+                .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                .foregroundStyle(.white)
                 .minimumScaleFactor(0.7)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 8)
-        .background(color.opacity(0.1))
+        .background(color.opacity(0.12))
         .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(color.opacity(0.22), lineWidth: 1))
     }
 
     private func statCard(title: String, value: String, icon: String) -> some View {
         VStack(spacing: 4) {
             Image(systemName: icon)
-                .font(.title3)
-                .foregroundStyle(.secondary)
+                .font(.system(size: 16)).foregroundStyle(Color(white: 0.40))
             Text(value)
-                .font(.headline.monospacedDigit())
+                .font(.system(size: 16, weight: .bold).monospacedDigit()).foregroundStyle(.white)
             Text(title)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(.system(size: 10)).foregroundStyle(Color(white: 0.38))
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 12)
-        .background(.background)
+        .background(Color(white: 0.07))
         .clipShape(RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(white: 0.13), lineWidth: 1))
     }
 
     // MARK: - Setup

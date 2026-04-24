@@ -11,21 +11,36 @@ struct WatchHomeView: View {
     var sessionManager: WatchSessionManager
 
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 10) {
             Image(systemName: "figure.boxing")
-                .font(.system(size: 40))
-                .foregroundStyle(.red)
+                .font(.system(size: 36, weight: .semibold))
+                .foregroundStyle(
+                    LinearGradient(
+                        colors: [Color(red: 1.0, green: 0.22, blue: 0.18),
+                                 Color(red: 1.0, green: 0.50, blue: 0.10)],
+                        startPoint: .top, endPoint: .bottom
+                    )
+                )
 
-            Text("Boxed Up")
-                .font(.headline)
+            Text("BOXED UP")
+                .font(.system(size: 16, weight: .black))
+                .foregroundStyle(.white)
+                .tracking(2)
 
-            HStack(spacing: 4) {
-                Image(systemName: sessionManager.isPhoneReachable ? "iphone.radiowaves.left.and.right" : "iphone.slash")
+            HStack(spacing: 5) {
+                Circle()
+                    .fill(sessionManager.isPhoneReachable ? Color.green : Color.red)
+                    .frame(width: 6, height: 6)
+                Text(sessionManager.isPhoneReachable ? "READY" : "NO iPHONE")
+                    .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(sessionManager.isPhoneReachable ? .green : .red)
-                Text(sessionManager.isPhoneReachable ? "Ready" : "No iPhone")
-                    .font(.caption2)
-                    .foregroundStyle(sessionManager.isPhoneReachable ? .green : .red)
+                    .tracking(0.8)
             }
+            .padding(.horizontal, 10).padding(.vertical, 4)
+            .background((sessionManager.isPhoneReachable ? Color.green : Color.red).opacity(0.15))
+            .clipShape(Capsule())
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.black)
     }
 }

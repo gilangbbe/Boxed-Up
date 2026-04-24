@@ -48,6 +48,7 @@ class SparringViewModel {
     private(set) var isDisconnected: Bool = false
     private(set) var reactionTimeRemaining: Double = 1.0
     private(set) var comboStepResults: [Bool?] = []
+    private(set) var isShowingComboPreview: Bool = false
 
     private var currentComboIndex: Int = 0
     private let combosPerRound = 3
@@ -100,6 +101,7 @@ class SparringViewModel {
             if let punch = roundManager.currentAction {
                 sessionManager.send(.gameState(punch))
             }
+            startReactionTimeout()
         case .glove:
             roundManager.startRound()
             gloveManager.startScanning()
@@ -108,26 +110,23 @@ class SparringViewModel {
             if let punch = roundManager.currentAction {
                 sessionManager.send(.gameState(punch))
             }
+            startReactionTimeout()
         case .combo:
             currentComboIndex = 0
             comboManager.generateNewCombo()
             comboStepResults = Array(repeating: nil, count: comboManager.stepsPerCombo)
-            comboStepStartTime = Date()
             gloveManager.startScanning()
             gloveManager.startCapture()   // tell ESP32 to start streaming
             setupGloveCallback()
-            if let step = comboManager.currentStep, step.hand == .left {
-                sessionManager.send(.gameState(step.punch))
-            }
+            beginComboWithPreview()
         }
-
-        startReactionTimeout()
     }
 
     func endRound() {
         timeoutTask?.cancel()
         timeoutTask = nil
         isWaitingForPunch = false
+        isShowingComboPreview = false
         gamePhase = .results
         comboStepStartTime = nil
 
@@ -492,6 +491,35 @@ class SparringViewModel {
 
     // MARK: - Advance: Combo
 
+    private func beginComboWithPreview() {
+        timeoutTask?.cancel()
+        timeoutTask = nil
+        isWaitingForPunch = false
+        isShowingComboPreview = true
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            try? await Task.sleep(for: .seconds(3.0))
+            guard self.gamePhase == .playing else { return }
+            self.isShowingComboPreview = false
+            self.startFirstComboStep()
+        }
+    }
+
+    private func startFirstComboStep() {
+        motionBuffer.reset()
+        gloveBuffer.reset()
+        classifier?.resetDetectorState()
+        lastPunchResult = nil
+        lastPunchCorrect = nil
+        comboStepStartTime = Date()
+        isWaitingForPunch = true
+        if let step = comboManager.currentStep, step.hand == .left {
+            sessionManager.send(.gameState(step.punch))
+        }
+        startReactionTimeout()
+    }
+
     private func startNextComboStep() {
         motionBuffer.reset()
         gloveBuffer.reset()
@@ -522,13 +550,7 @@ class SparringViewModel {
         motionBuffer.reset()
         gloveBuffer.reset()
         classifier?.resetDetectorState()
-        comboStepStartTime = Date()
-        isWaitingForPunch = true
-
-        if let step = comboManager.currentStep, step.hand == .left {
-            sessionManager.send(.gameState(step.punch))
-        }
-        startReactionTimeout()
+        beginComboWithPreview()
     }
 
     // MARK: - Helpers

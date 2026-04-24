@@ -396,7 +396,42 @@ Watch (50 Hz motion) → WCSession → iPhone
 
 ---
 
-## Phase 8: DIY Smart Glove (ESP32 + MPU6050 via BLE)
+## Phase 9: Production UI Redesign (Dark Athletic Theme)
+
+### 9.1 Design Language
+Dark, immersive sports aesthetic inspired by Nike Training Club, WHOOP, and Apple Fitness+.
+
+**Design tokens:**
+- Background: `Color(red: 0.05, green: 0.05, blue: 0.07)`
+- Card background: `Color(white: 0.09–0.12)` with `Color(white: 0.13–0.15)` borders
+- Primary action: red gradient `[Color(red: 1, green: 0.18, blue: 0.13), Color(red: 0.82, green: 0.08, blue: 0.04)]`
+- Section labels: 10–11pt bold, 2–3pt letter-spacing, all-caps, `Color(white: 0.38)` tint
+- Muted body: `Color(white: 0.42–0.50)`
+- All root views: `.preferredColorScheme(.dark)`
+
+### 9.2 iOS Views ✅
+- **HomeView** — `GameModeCard` icon cards, `DifficultyChip` pills, `ConnectionBadge` capsule pills, animated hero with pulsing glow + boxing icon, gradient Start Round button
+- **SparringView** — Circular arc timer (`Circle().trim` + `AngularGradient`), `scoreHUD` strip, `PunchFeedbackCard`, `ComboProgressView` with hand badges
+- **ResultsView** — Animated accuracy ring, grade system (S/A/B/C/D), `RadialGradient` tinted by grade, `ResultStatRow` stats card
+- **GloveTestView** — Dark connection card with ZStack icon, gradient capture button, axis view cells with per-color borders, dark stat grid
+- **DataCollectionView** — Icon card label selector, capsule connection pills, dark countdown/recording states, gradient export button
+
+### 9.3 watchOS Views ✅
+- **WatchHomeView** — `Color.black`, gradient badge icon, capsule connection pill
+- **WatchGameView** — 28pt black-weight punch text, animated transitions
+- **WatchDataCollectionView** — Pulsing red recording indicator
+
+### 9.4 Key patterns
+- `ZStack` + `RadialGradient` for ambient background atmosphere
+- `Circle().trim` + `AngularGradient` + `rotationEffect(-90°)` for arc progress rings
+- `LinearGradient` buttons with `.shadow(color: color.opacity(0.35))`
+- `Capsule()` for all status / connection badges
+- `RoundedRectangle` cards with `.overlay(…stroke(…))` border
+- Entry animations via `@State private var heroPulse / ringAppeared / recordPulse`
+
+**Status: ✅ Complete** — All 8 views redesigned. No logic changes.
+
+---
 
 > **Goal:** Build a student-friendly, low-cost smart glove for the non-Watch hand using off-the-shelf components. The glove streams 6-axis IMU data (accelerometer + gyroscope) to the iPhone over Bluetooth Low Energy (BLE), mirroring the Apple Watch's motion data format. This enables dual-hand punch detection and combo game modes.
 

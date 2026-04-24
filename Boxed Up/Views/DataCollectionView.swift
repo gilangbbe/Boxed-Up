@@ -18,101 +18,134 @@ struct DataCollectionView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 24) {
-                    labelPicker
-                    sourcePicker
-                    sessionCountsGrid
-                    recordingArea
-                    statusBar
-                    actionButtons
+            ZStack {
+                Color(red: 0.05, green: 0.05, blue: 0.07).ignoresSafeArea()
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: 20) {
+                        labelPicker
+                        sourcePicker
+                        sessionCountsGrid
+                        recordingArea
+                        statusBar
+                        actionButtons
+                    }
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 12)
                 }
-                .padding()
             }
-            .navigationTitle("Collect Training Data")
+            .navigationTitle("Training Data")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(Color(red: 0.05, green: 0.05, blue: 0.07), for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("Done") {
-                        onDone()
-                    }
-                    .disabled(viewModel.isRecording || viewModel.countdown != nil)
+                    Button("Done") { onDone() }
+                        .foregroundStyle(.red)
+                        .disabled(viewModel.isRecording || viewModel.countdown != nil)
                 }
             }
             .sheet(isPresented: $showExportSheet) {
-                if let url = exportURL {
-                    ShareSheet(activityItems: [url])
-                }
+                if let url = exportURL { ShareSheet(activityItems: [url]) }
             }
             .alert("Delete All Data?", isPresented: $showDeleteConfirm) {
-                Button("Delete", role: .destructive) {
-                    viewModel.deleteAllData()
-                }
+                Button("Delete", role: .destructive) { viewModel.deleteAllData() }
                 Button("Cancel", role: .cancel) { }
             } message: {
                 Text("This will permanently delete all \(viewModel.totalSessions) recorded sessions.")
             }
         }
+        .preferredColorScheme(.dark)
     }
 
     // MARK: - Label Picker
 
     private var labelPicker: some View {
-        VStack(spacing: 12) {
-            Text("Select Punch Type")
-                .font(.headline)
+        VStack(spacing: 10) {
+            Text("PUNCH TYPE")
+                .font(.system(size: 10, weight: .bold)).tracking(2.5)
+                .foregroundStyle(Color(white: 0.38))
+                .frame(maxWidth: .infinity, alignment: .leading)
 
-            Picker("Label", selection: $viewModel.selectedLabel) {
+            HStack(spacing: 8) {
                 ForEach(DataCollectionLabel.allCases, id: \.self) { label in
-                    Text(label.displayName).tag(label)
+                    Button { viewModel.selectedLabel = label } label: {
+                        VStack(spacing: 4) {
+                            Image(systemName: label.iconName).font(.system(size: 18))
+                            Text(label.displayName).font(.system(size: 11, weight: .semibold))
+                        }
+                        .foregroundStyle(viewModel.selectedLabel == label ? .white : Color(white: 0.42))
+                        .frame(maxWidth: .infinity).frame(height: 60)
+                        .background(viewModel.selectedLabel == label ? Color.red.opacity(0.85) : Color(white: 0.09))
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(viewModel.selectedLabel == label ? Color.red : Color(white: 0.15), lineWidth: 1)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(viewModel.isRecording || viewModel.countdown != nil)
                 }
             }
-            .pickerStyle(.segmented)
-            .disabled(viewModel.isRecording || viewModel.countdown != nil)
 
             Text(viewModel.selectedLabel.description)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(.system(size: 11))
+                .foregroundStyle(Color(white: 0.42))
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
     // MARK: - Session Counts
 
     private var sessionCountsGrid: some View {
-        VStack(spacing: 8) {
-            Text("Sessions Collected")
-                .font(.headline)
+        VStack(spacing: 10) {
+            HStack {
+                Text("SESSIONS COLLECTED")
+                    .font(.system(size: 10, weight: .bold)).tracking(2)
+                    .foregroundStyle(Color(white: 0.38))
+                Spacer()
+                Text("\(viewModel.totalSessions) total")
+                    .font(.system(size: 11)).foregroundStyle(Color(white: 0.38))
+            }
 
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 4), spacing: 12) {
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 4), spacing: 10) {
                 ForEach(DataCollectionLabel.allCases, id: \.self) { label in
+                    let isSelected = label == viewModel.selectedLabel
+                    let count = viewModel.progressCount(for: label)
                     VStack(spacing: 4) {
                         Image(systemName: label.iconName)
-                            .font(.title2)
-                            .foregroundStyle(label == viewModel.selectedLabel ? .blue : .secondary)
+                            .font(.system(size: 18))
+                            .foregroundStyle(isSelected ? .white : Color(white: 0.45))
+                        Text("\(count)")
+                            .font(.system(size: 20, weight: .bold).monospacedDigit())
+                            .foregroundStyle(countColor(for: count))
                         Text(label.displayName)
-                            .font(.caption2)
-                        Text(viewModel.sessionCountText(for: label))
-                            .font(.title3.bold())
-                            .foregroundStyle(countColor(for: viewModel.progressCount(for: label)))
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(Color(white: 0.38))
                     }
-                    .padding(8)
-                    .background(label == viewModel.selectedLabel ? Color.blue.opacity(0.1) : Color.clear)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .padding(.vertical, 10)
+                    .frame(maxWidth: .infinity)
+                    .background(isSelected ? Color.red.opacity(0.12) : Color(white: 0.09))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(isSelected ? Color.red.opacity(0.35) : Color(white: 0.13), lineWidth: 1)
+                    )
                 }
             }
 
-            Text("Recommended: 50+ sessions per type")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+            Text("Target: 50+ sessions per type")
+                .font(.system(size: 10)).foregroundStyle(Color(white: 0.32))
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
     // MARK: - Source Picker
 
     private var sourcePicker: some View {
-        VStack(spacing: 12) {
-            Text("Collection Source")
-                .font(.headline)
+        VStack(alignment: .leading, spacing: 10) {
+            Text("COLLECTION SOURCE")
+                .font(.system(size: 10, weight: .bold)).tracking(2.5)
+                .foregroundStyle(Color(white: 0.38))
 
             Picker("Source", selection: $viewModel.selectedSource) {
                 ForEach(DataCollectionSource.allCases, id: \.self) { source in
@@ -120,12 +153,12 @@ struct DataCollectionView: View {
                 }
             }
             .pickerStyle(.menu)
+            .tint(.red)
             .disabled(viewModel.isRecording || viewModel.countdown != nil)
 
-            Text("Smart Glove is fixed on RIGHT hand. Watch data is stored as LEFT hand.")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+            Text("Smart Glove = RIGHT hand  •  Watch data = LEFT hand")
+                .font(.system(size: 10))
+                .foregroundStyle(Color(white: 0.38))
         }
     }
 
@@ -134,51 +167,56 @@ struct DataCollectionView: View {
     private var recordingArea: some View {
         VStack(spacing: 16) {
             if let countdown = viewModel.countdown {
-                Text("\(countdown)")
-                    .font(.system(size: 80, weight: .bold))
-                    .foregroundStyle(.orange)
-                    .contentTransition(.numericText())
-                    .animation(.easeInOut, value: countdown)
-
-                Text("Get Ready...")
-                    .font(.title3)
-                    .foregroundStyle(.secondary)
+                VStack(spacing: 8) {
+                    Text("\(countdown)")
+                        .font(.system(size: 88, weight: .black))
+                        .foregroundStyle(Color(red: 1, green: 0.55, blue: 0.1))
+                        .contentTransition(.numericText())
+                        .animation(.easeInOut, value: countdown)
+                    Text("GET READY")
+                        .font(.system(size: 13, weight: .bold)).tracking(2)
+                        .foregroundStyle(Color(white: 0.45))
+                }
+                .frame(maxWidth: .infinity).frame(height: 160)
+                .background(Color(white: 0.09))
+                .clipShape(RoundedRectangle(cornerRadius: 18))
 
             } else if viewModel.isRecording {
-                VStack(spacing: 8) {
-                    Circle()
-                        .fill(.red)
-                        .frame(width: 20, height: 20)
-                        .overlay(Circle().stroke(.red.opacity(0.5), lineWidth: 4))
-
-                    Text("Recording...")
-                        .font(.title2.bold())
+                VStack(spacing: 10) {
+                    ZStack {
+                        Circle().fill(Color.red.opacity(0.15)).frame(width: 64, height: 64)
+                        Circle().fill(Color.red).frame(width: 18, height: 18)
+                    }
+                    Text("RECORDING")
+                        .font(.system(size: 16, weight: .bold)).tracking(1.5)
                         .foregroundStyle(.red)
-
                     Text("\(viewModel.recordingSampleCount) samples")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-
+                        .font(.system(size: 13, weight: .semibold).monospacedDigit())
+                        .foregroundStyle(Color(white: 0.50))
                     Text("Throw a \(viewModel.selectedLabel.displayName)!")
-                        .font(.headline)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.white)
                 }
-                .frame(height: 160)
+                .frame(maxWidth: .infinity).frame(height: 160)
+                .background(Color.red.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 18))
+                .overlay(RoundedRectangle(cornerRadius: 18).stroke(Color.red.opacity(0.22), lineWidth: 1))
 
             } else {
-                Button {
-                    viewModel.startRecording()
-                } label: {
-                    VStack(spacing: 8) {
-                        Image(systemName: "record.circle")
-                            .font(.system(size: 60))
-                        Text("Record \(viewModel.selectedLabel.displayName)")
-                            .font(.title3.bold())
+                Button { viewModel.startRecording() } label: {
+                    VStack(spacing: 10) {
+                        Image(systemName: "record.circle").font(.system(size: 52))
+                        Text("RECORD  \(viewModel.selectedLabel.displayName.uppercased())")
+                            .font(.system(size: 14, weight: .bold)).tracking(1)
                     }
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 160)
-                    .background(.red.opacity(0.1))
-                    .foregroundStyle(.red)
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .foregroundStyle(viewModel.canRecord ? .red : Color(white: 0.35))
+                    .frame(maxWidth: .infinity).frame(height: 160)
+                    .background(viewModel.canRecord ? Color.red.opacity(0.09) : Color(white: 0.07))
+                    .clipShape(RoundedRectangle(cornerRadius: 18))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 18)
+                            .stroke(viewModel.canRecord ? Color.red.opacity(0.22) : Color(white: 0.12), lineWidth: 1)
+                    )
                 }
                 .disabled(!viewModel.canRecord)
             }
@@ -190,74 +228,99 @@ struct DataCollectionView: View {
     private var statusBar: some View {
         VStack(spacing: 8) {
             Text(viewModel.statusMessage)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .font(.system(size: 12))
+                .foregroundStyle(Color(white: 0.50))
                 .multilineTextAlignment(.center)
 
-            HStack {
-                Image(systemName: viewModel.sessionManager.isWatchReachable
-                      ? "applewatch.radiowaves.left.and.right" : "applewatch.slash")
-                    .foregroundStyle(viewModel.sessionManager.isWatchReachable ? .green : .red)
-                Text(viewModel.sessionManager.isWatchReachable ? "Left Watch Connected" : "Left Watch Not Connected")
-                    .font(.caption)
-                    .foregroundStyle(viewModel.sessionManager.isWatchReachable ? .green : .red)
-            }
-
-            HStack {
-                Image(systemName: viewModel.gloveManager.isGloveConnected
-                      ? "hand.raised.fingers.spread.fill" : "hand.raised.slash.fill")
-                    .foregroundStyle(viewModel.gloveManager.isGloveConnected ? .green : .red)
-                Text(viewModel.gloveManager.isGloveConnected ? "Right Smart Glove Connected" : "Right Smart Glove Not Connected")
-                    .font(.caption)
-                    .foregroundStyle(viewModel.gloveManager.isGloveConnected ? .green : .red)
+            HStack(spacing: 12) {
+                connectionPill(
+                    icon: viewModel.sessionManager.isWatchReachable
+                        ? "applewatch.radiowaves.left.and.right" : "applewatch.slash",
+                    label: "Left Watch",
+                    connected: viewModel.sessionManager.isWatchReachable
+                )
+                connectionPill(
+                    icon: viewModel.gloveManager.isGloveConnected
+                        ? "hand.raised.fingers.spread.fill" : "hand.raised.slash.fill",
+                    label: "Right Glove",
+                    connected: viewModel.gloveManager.isGloveConnected
+                )
             }
 
             if !viewModel.gloveManager.isGloveConnected {
                 Button {
-                    if viewModel.gloveManager.isScanning {
-                        viewModel.gloveManager.stopScanning()
-                    } else {
-                        viewModel.gloveManager.startScanning()
-                    }
+                    if viewModel.gloveManager.isScanning { viewModel.gloveManager.stopScanning() }
+                    else { viewModel.gloveManager.startScanning() }
                 } label: {
-                    Label(viewModel.gloveManager.isScanning ? "Scanning Smart Glove..." : "Connect Smart Glove", systemImage: "dot.radiowaves.left.and.right")
-                        .font(.caption)
+                    Label(
+                        viewModel.gloveManager.isScanning ? "Scanning..." : "Connect Smart Glove",
+                        systemImage: "dot.radiowaves.left.and.right"
+                    )
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Color(red: 1, green: 0.55, blue: 0.1))
                 }
             }
         }
     }
 
+    private func connectionPill(icon: String, label: String, connected: Bool) -> some View {
+        HStack(spacing: 5) {
+            Circle().fill(connected ? Color.green : Color.red).frame(width: 6, height: 6)
+            Image(systemName: icon).font(.system(size: 11))
+            Text(label).font(.system(size: 10, weight: .semibold)).tracking(0.5)
+        }
+        .foregroundStyle(connected ? Color.green : Color.red.opacity(0.8))
+        .padding(.horizontal, 10).padding(.vertical, 5)
+        .background((connected ? Color.green : Color.red).opacity(0.10))
+        .clipShape(Capsule())
+        .overlay(Capsule().stroke((connected ? Color.green : Color.red).opacity(0.25), lineWidth: 1))
+    }
+
     // MARK: - Action Buttons
 
     private var actionButtons: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 10) {
             Button {
                 exportURL = viewModel.exportTrainingData()
-                if exportURL != nil {
-                    showExportSheet = true
-                }
+                if exportURL != nil { showExportSheet = true }
             } label: {
-                Label("Export Training Data", systemImage: "square.and.arrow.up")
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(.blue)
-                    .foregroundStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                HStack(spacing: 8) {
+                    Image(systemName: "square.and.arrow.up").font(.system(size: 14, weight: .semibold))
+                    Text("EXPORT TRAINING DATA").font(.system(size: 14, weight: .bold)).tracking(0.8)
+                }
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity).frame(height: 50)
+                .background(
+                    viewModel.totalSessions > 0
+                        ? LinearGradient(
+                            colors: [Color(red: 0.18, green: 0.48, blue: 1.0),
+                                     Color(red: 0.10, green: 0.35, blue: 0.85)],
+                            startPoint: .topLeading, endPoint: .bottomTrailing)
+                        : LinearGradient(
+                            colors: [Color(white: 0.16), Color(white: 0.12)],
+                            startPoint: .topLeading, endPoint: .bottomTrailing)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 13))
             }
             .disabled(viewModel.totalSessions == 0)
 
-            Button {
-                showDeleteConfirm = true
-            } label: {
-                Label("Delete All Data", systemImage: "trash")
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(.red.opacity(0.1))
-                    .foregroundStyle(.red)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+            Button { showDeleteConfirm = true } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "trash").font(.system(size: 13))
+                    Text("Delete All Data").font(.system(size: 14, weight: .semibold))
+                }
+                .foregroundStyle(viewModel.totalSessions > 0 ? Color.red : Color(white: 0.35))
+                .frame(maxWidth: .infinity).frame(height: 46)
+                .background(viewModel.totalSessions > 0 ? Color.red.opacity(0.10) : Color(white: 0.07))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(viewModel.totalSessions > 0 ? Color.red.opacity(0.22) : Color(white: 0.12), lineWidth: 1)
+                )
             }
             .disabled(viewModel.totalSessions == 0)
         }
+        .padding(.bottom, 8)
     }
 
     private func countColor(for count: Int) -> Color {

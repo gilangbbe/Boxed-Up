@@ -1279,3 +1279,247 @@ Both targets (`Boxed Up` iOS and `Boxed Up Watch Watch App` watchOS) build succe
 
 **Phase 8 is complete.** All planned sub-phases implemented.
 
+---
+
+## Entry 21 — Phase 9: Production UI Redesign (Dark Athletic Theme)
+
+### Goal
+
+Transform all views from functional-but-plain system defaults into a premium, production-ready fitness app aesthetic — dark, immersive, and sports-forward. Inspired by Nike Training Club, WHOOP, and Apple Fitness+.
+
+### Design System
+
+| Token | Value |
+|-------|-------|
+| Background | `Color(red: 0.05, green: 0.05, blue: 0.07)` |
+| Card background | `Color(white: 0.09–0.12)` |
+| Card border | `Color(white: 0.13–0.15)` |
+| Primary gradient | Red `Color(red: 1, green: 0.18, blue: 0.13)` → `Color(red: 0.82, green: 0.08, blue: 0.04)` |
+| Muted text | `Color(white: 0.38–0.42)` |
+| Section labels | 10–11pt, `.bold`, `.tracking(2–3)`, all-caps |
+| Color scheme | `.preferredColorScheme(.dark)` on all root views |
+
+### Files redesigned
+
+#### iOS Target
+
+**`HomeView.swift`** — Full redesign
+- `ZStack` with dark background + `RadialGradient` ambient glow
+- Animated hero pulsing glow circle (`@State private var heroPulse`) with boxing icon on gradient badge
+- `GameModeCard` — dark card (icon + mode name + subtitle + checkmark) replaces segmented `Picker`
+- `DifficultyChip` — pill buttons for difficulty selection
+- `ConnectionBadge` — capsule pill with dot indicator (green/red)
+- Gradient Start Round button with red shadow
+- Utility row: `UtilityButton` components for Training Data and Glove Test
+
+**`SparringView.swift`** — Full redesign
+- `scoreHUD` — 3-cell horizontal strip with dividers
+- `centralRing` — circular arc timer: `Circle().trim` + `AngularGradient` + `rotationEffect(-90°)`, action content inside
+- `feedbackZone` — fixed-height `ZStack` for `PunchFeedbackCard` / `TimeoutCard`
+- `roundFooter` — combo progress strip + action counter
+- `ComboProgressView` — restyleds with `chevron.right` separators, dark backgrounds, hand badges
+- Disconnect overlay with dark glass effect preserved
+- `safeAccuracy` guard against NaN/Infinity
+
+**`ResultsView.swift`** — Full redesign
+- Dark background with `RadialGradient` tinted by grade
+- Animated accuracy ring: `Circle().trim`, `@State private var ringAppeared`
+- Grade letter + pts inside ring
+- Grade system: S (gold, acc≥0.9 & avgTime<0.4s), A (green), B (blue), C (orange), D (red)
+- 4-row stats card using `ResultStatRow` (icon + label + value)
+- Gradient Play Again button + minimal Home button
+
+**`GloveTestView.swift`** — Full redesign
+- Dark `ZStack` + `.toolbarBackground` for navigation bar
+- `connectionSection` — dark card with ZStack icon circle + gradient scan button
+- `captureControlSection` — gradient green/red button with colored shadow
+- `liveDataSection` — dark card, "LIVE IMU DATA" header, axis cells with colored border overlays
+- `statsSection` — dark `statCard` grid, "STREAM STATS" header
+- `axisView` helper — color-tinted background + border per axis
+- `.preferredColorScheme(.dark)` on `NavigationStack`
+
+**`DataCollectionView.swift`** — Full redesign
+- Dark `ZStack` + `.toolbarBackground` + red "Done" button
+- `labelPicker` — `HStack` of icon+label cards (red selected state) replaces segmented `Picker`
+- `sessionCountsGrid` — dark mini-cards per label with red selected highlight
+- `sourcePicker` — `.tint(.red)` on `.menu` picker, section label
+- `recordingArea` — dark countdown box (88pt bold orange countdown), pulsing red recording indicator, dark record button with red border
+- `statusBar` — capsule connection pills (`connectionPill` helper) for Watch + Glove
+- `actionButtons` — blue gradient Export button, red-tinted Delete button
+
+#### watchOS Target
+
+**`WatchHomeView.swift`** — Dark polish
+- `Color.black` background, gradient boxing icon, all-caps "BOXED UP" with letter-spacing
+- Capsule connection status pill with dot indicator
+
+**`WatchGameView.swift`** — Dark polish
+- `Color.black.ignoresSafeArea()`, large uppercase punch text at 28pt black weight with tracking
+- Animated `.asymmetric` transition, result icons
+
+**`WatchDataCollectionView.swift`** — Dark polish
+- "DATA COLLECTION" all-caps label, pulsing red circle when recording
+
+### Architecture patterns used
+
+- All sub-components declared as `private` structs or `private var` computed properties in the same file
+- `RadialGradient` for ambient color atmosphere
+- `AngularGradient` + `Circle().trim` for arc timers
+- `LinearGradient` for primary action buttons with `.shadow`
+- `Capsule()` for status badges
+- `RoundedRectangle` cards with `.overlay` border pattern
+- `@State private var heroPulse / ringAppeared / recordPulse` for entry animations
+
+### Files changed
+
+| File | Status |
+|------|--------|
+| `Boxed Up/Views/HomeView.swift` | ✅ Fully redesigned |
+| `Boxed Up/Views/SparringView.swift` | ✅ Fully redesigned |
+| `Boxed Up/Views/ResultsView.swift` | ✅ Fully redesigned |
+| `Boxed Up/Views/GloveTestView.swift` | ✅ Fully redesigned |
+| `Boxed Up/Views/DataCollectionView.swift` | ✅ Fully redesigned |
+| `Boxed Up Watch Watch App/Views/WatchHomeView.swift` | ✅ Dark polish |
+| `Boxed Up Watch Watch App/Views/WatchGameView.swift` | ✅ Dark polish |
+| `Boxed Up Watch Watch App/Views/WatchDataCollectionView.swift` | ✅ Dark polish |
+
+No logic changes — pure UI layer. All game logic, ML pipeline, connectivity, and scoring untouched.
+
+---
+
+## Entry 22 — Build Fix: Type Mismatch in GloveTestView Capture Button
+
+### Error
+
+```
+GloveTestView.swift:157:33: error: result values in '? :' expression have mismatching types 'Color' and 'LinearGradient'
+```
+
+### Root Cause
+
+The `captureControlSection` button used a ternary operator in `.background(...)` where the two branches returned different types — `Color.red.opacity(0.9)` (type `Color`) when capturing, and a `LinearGradient` when idle. Swift's type system requires both sides of a ternary to be the same concrete type.
+
+### Fix
+
+Replaced the ternary with a single `LinearGradient` call that varies its `colors` array based on `isCapturing`:
+
+```swift
+.background(
+    LinearGradient(
+        colors: isCapturing
+            ? [Color.red.opacity(0.9), Color.red.opacity(0.75)]
+            : [Color(red: 0.15, green: 0.75, blue: 0.35),
+               Color(red: 0.05, green: 0.60, blue: 0.25)],
+        startPoint: .topLeading, endPoint: .bottomTrailing)
+)
+```
+
+Both branches now produce the same `LinearGradient` type. The visual result is identical.
+
+**File changed:** `Boxed Up/Views/GloveTestView.swift`
+
+**Build result:** ✅ Both targets build successfully.
+
+---
+
+## Entry 23 — Feature: Combo Preview Screen Before Each Combo
+
+### What was built
+
+In Combo game mode, before each combo execution begins the app now shows a full-screen **combo preview overlay** for 3 seconds. The preview reveals the entire upcoming combo — all steps with hand, punch type, and device indicator — so the player knows what sequence to throw before the round timer starts.
+
+### UX flow (Combo mode)
+
+```
+startRound()
+  → beginComboWithPreview()           ← shows ComboPreviewOverlay for 3s
+      → [3 second preview delay]
+  → startFirstComboStep()             ← hides overlay, starts reaction timer
+  → [player executes steps]
+  → advanceCombo()
+      → comboManager.generateNewCombo()
+      → beginComboWithPreview()        ← preview again before next combo
+      → [3 second preview delay]
+  → startFirstComboStep()
+  → … repeat until combosPerRound done
+  → endRound()
+```
+
+### Preview overlay design (`ComboPreviewOverlay`)
+
+- Near-black full-screen background (`Color(red:0.03,green:0.03,blue:0.05).opacity(0.97)`)
+- Header: "INCOMING COMBO" all-caps tracking label + "COMBO N OF M" bold title
+- Step cards: one card per step, each showing:
+  - Coloured circle badge — **blue "L"** for Watch (left), **red "R"** for Glove (right)
+  - Punch type name in white black-weight text
+  - Device label: "WATCH" or "GLOVE" in muted caption
+  - Cards separated by `arrow.right` icons
+- Animated red gradient fill bar that fills left-to-right over 3 seconds, capped with "GET READY" label
+- `.transition(.opacity)` + `.animation(.easeInOut(duration: 0.35))` on enter/exit
+
+### ViewModel changes (`SparringViewModel.swift`)
+
+- Added `private(set) var isShowingComboPreview: Bool = false`
+- Added `private func beginComboWithPreview()` — cancels any pending timeout, sets `isShowingComboPreview = true`, waits 3 seconds via `Task.sleep`, then calls `startFirstComboStep()`
+- Added `private func startFirstComboStep()` — extracted from the repeated tail of both `startRound(.combo)` and `advanceCombo()`: resets buffers, sets `comboStepStartTime`, `isWaitingForPunch = true`, sends Watch game state, calls `startReactionTimeout()`
+- `startRound(.combo)` — removed direct step setup; calls `beginComboWithPreview()` instead; `startReactionTimeout()` moved inside each case (no longer called unconditionally at the end)
+- `advanceCombo()` — removed direct step setup; calls `beginComboWithPreview()` instead
+- `endRound()` — sets `isShowingComboPreview = false` to clean up if round ends during preview
+
+### View changes (`SparringView.swift`)
+
+- Added `ComboPreviewOverlay` private struct (bottom of file)
+- Added overlay to `body` ZStack: shown when `viewModel.isShowingComboPreview == true`
+- Wrapped in `.animation(.easeInOut(duration: 0.35), value: viewModel.isShowingComboPreview)` for smooth fade
+
+### Files changed
+
+| File | Changes |
+|------|---------|
+| `Boxed Up/ViewModels/SparringViewModel.swift` | `isShowingComboPreview` state, `beginComboWithPreview()`, `startFirstComboStep()`, refactored `startRound`/`advanceCombo`/`endRound` |
+| `Boxed Up/Views/SparringView.swift` | `ComboPreviewOverlay` struct, overlay wired into body ZStack |
+
+**Build result:** ✅ BUILD SUCCEEDED
+
+---
+
+## Entry 24 — Bug Fix: Stale Motion Data Causes Instant Inference After Combo Preview
+
+### Problem
+
+After the 3-second combo preview screen the first punch was being detected and classified instantly — before the player had thrown anything. The reaction timer would start and immediately complete.
+
+### Root Cause
+
+In both `setupMotionCallback()` and `setupGloveCallback()`, samples are appended to their respective buffers **before** the `isWaitingForPunch` guard:
+
+```swift
+self.motionBuffer.append(samples)   // ← runs unconditionally
+guard self.isWaitingForPunch else { return }
+```
+
+During the 3-second preview `isWaitingForPunch` is `false`, so no inference fires — but the buffers keep filling with live motion data the whole time. The instant the preview ends and `isWaitingForPunch` flips to `true`, the very next incoming motion batch triggers the ML pipeline against a full, stale window (3 seconds of ambient wrist movement), which confidently classifies it as a punch and fires `processComboStep` immediately.
+
+### Fix
+
+Added the same buffer-flush that `startNextComboStep()` already performs to `startFirstComboStep()`, which runs when the preview finishes:
+
+```swift
+private func startFirstComboStep() {
+    motionBuffer.reset()
+    gloveBuffer.reset()
+    classifier?.resetDetectorState()
+    lastPunchResult = nil
+    lastPunchCorrect = nil
+    comboStepStartTime = Date()
+    isWaitingForPunch = true
+    ...
+}
+```
+
+Resetting both buffers and the detector's recurrent state immediately before arming `isWaitingForPunch` guarantees the first inference window is built entirely from new post-preview data.
+
+**File changed:** `Boxed Up/ViewModels/SparringViewModel.swift`
+
+**Build result:** ✅ BUILD SUCCEEDED
+

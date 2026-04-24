@@ -10,40 +10,54 @@ import SwiftUI
 /// Minimal Watch display during data collection mode.
 struct WatchDataCollectionView: View {
     let isRecording: Bool
+    @State private var recordPulse = false
 
     var body: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "figure.boxing")
-                .font(.title2)
-                .foregroundStyle(.blue)
+        ZStack {
+            Color.black.ignoresSafeArea()
 
-            Text("Data Collection")
-                .font(.headline)
+            VStack(spacing: 8) {
+                Text("DATA COLLECTION")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(Color(white: 0.40))
+                    .tracking(1.5)
 
-            if isRecording {
-                VStack(spacing: 8) {
-                    Circle()
-                        .fill(.red)
-                        .frame(width: 16, height: 16)
+                if isRecording {
+                    ZStack {
+                        Circle()
+                            .fill(Color.red.opacity(recordPulse ? 0.25 : 0.08))
+                            .frame(width: 60, height: 60)
+                            .animation(.easeInOut(duration: 0.7).repeatForever(autoreverses: true), value: recordPulse)
+                        Circle()
+                            .fill(Color.red)
+                            .frame(width: 14, height: 14)
+                    }
+                    .onAppear { recordPulse = true }
+                    .onDisappear { recordPulse = false }
 
-                    Text("Recording...")
-                        .font(.subheadline.bold())
+                    Text("RECORDING")
+                        .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(.red)
+                        .tracking(1)
 
                     Text("Throw now!")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            } else {
-                Text("Ready")
-                    .font(.subheadline)
-                    .foregroundStyle(.green)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color(white: 0.50))
+                } else {
+                    Image(systemName: "record.circle")
+                        .font(.system(size: 28))
+                        .foregroundStyle(Color(white: 0.35))
 
-                Text("Waiting for iPhone…")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    Text("READY")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(.green)
+                        .tracking(1)
+
+                    Text("Waiting for iPhone")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color(white: 0.38))
+                }
             }
         }
-        .padding()
     }
 }
