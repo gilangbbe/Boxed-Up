@@ -12,22 +12,26 @@ import Foundation
 class DataCollectionViewModel {
 
     let sessionManager: PhoneSessionManager
+    let gloveManager: GloveSessionManager
 
     // MARK: - State
 
     var selectedLabel: DataCollectionLabel = .jab
+    var selectedSource: DataCollectionSource = .rightGlove
     private(set) var isRecording = false
     private(set) var countdown: Int? = nil
-    private(set) var recordingBuffer: [MotionSample] = []
-    private(set) var sessionCounts: [DataCollectionLabel: Int] = [:]
+    private(set) var watchRecordingBuffer: [MotionSample] = []
+    private(set) var gloveRecordingBuffer: [MotionSample] = []
+    private(set) var sessionCountsBySource: [DataCollectionSource: [DataCollectionLabel: Int]] = [:]
     private(set) var statusMessage: String = "Select a punch type and tap Record"
 
     static let recordingDuration: TimeInterval = 3.0
 
     // MARK: - Init
 
-    init(sessionManager: PhoneSessionManager) {
+    init(sessionManager: PhoneSessionManager, gloveManager: GloveSessionManager) {
         self.sessionManager = sessionManager
+        self.gloveManager = gloveManager
         loadSessionCounts()
         setupMotionCallback()
     }
@@ -36,8 +40,13 @@ class DataCollectionViewModel {
 
     func startRecording() {
         guard !isRecording, countdown == nil else { return }
+        guard canRecord else {
+            statusMessage = unavailableStatus
+            return
+        }
 
-        recordingBuffer = []
+        watchRecordingBuffer = []
+        gloveRecordingBuffer = []
         countdown = 3
         statusMessage = "Get ready..."
 
@@ -53,10 +62,16 @@ class DataCollectionViewModel {
 
     private func beginCapture() {
         isRecording = true
-        recordingBuffer = []
+        watchRecordingBuffer = []
+        gloveRecordingBuffer = []
         statusMessage = "Recording \(selectedLabel.displayName)..."
 
-        sessionManager.send(.startCapture)
+        if selectedSource.includesWatch {
+            sessionManager.send(.startCapture)
+        }
+        if selectedSource.includesGlove {
+            gloveManager.startCapture()
+        }
 
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(Self.recordingDuration))
@@ -68,33 +83,60 @@ class DataCollectionViewModel {
         guard isRecording else { return }
         isRecording = false
 
-        sessionManager.send(.stopCapture)
-
-        let samples = recordingBuffer
-        recordingBuffer = []
-
-        if samples.isEmpty {
-            statusMessage = "No data received. Check Watch connection."
-            return
+        if selectedSource.includesWatch {
+            sessionManager.send(.stopCapture)
+        }
+        if selectedSource.includesGlove {
+            gloveManager.stopCapture()
         }
 
-        saveSession(label: selectedLabel, samples: samples)
+        let watchSamples = watchRecordingBuffer
+        let gloveSamples = gloveRecordingBuffer
+        watchRecordingBuffer = []
+        gloveRecordingBuffer = []
 
-        let count = sessionCounts[selectedLabel, default: 0]
-        statusMessage = "Saved! \(selectedLabel.displayName): \(count) sessions"
+        let timestampStem = Self.timestampString(from: Date())
+        var savedParts: [String] = []
+
+        if selectedSource.includesWatch {
+            if watchSamples.isEmpty {
+                savedParts.append("Left(Watch): no data")
+            } else {
+                let count = saveSession(label: selectedLabel, samples: watchSamples, source: .leftWatch, sessionStem: timestampStem)
+                savedParts.append("Left(Watch): \(count)")
+            }
+        }
+
+        if selectedSource.includesGlove {
+            if gloveSamples.isEmpty {
+                savedParts.append("Right(Glove): no data")
+            } else {
+                let count = saveSession(label: selectedLabel, samples: gloveSamples, source: .rightGlove, sessionStem: timestampStem)
+                savedParts.append("Right(Glove): \(count)")
+            }
+        }
+
+        if savedParts.allSatisfy({ $0.contains("no data") }) {
+            statusMessage = "No data received. Check source connection(s)."
+        } else {
+            statusMessage = "Saved \(selectedLabel.displayName) • " + savedParts.joined(separator: " | ")
+        }
     }
 
     // MARK: - Persistence
 
-    private func saveSession(label: DataCollectionLabel, samples: [MotionSample]) {
-        let directory = trainingDataDirectory(for: label)
+    private func saveSession(
+        label: DataCollectionLabel,
+        samples: [MotionSample],
+        source: DataCollectionSource,
+        sessionStem: String
+    ) -> Int {
+        let directory = trainingDataDirectory(for: label, source: source)
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
 
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyyMMdd_HHmmss"
-        let timestamp = formatter.string(from: Date())
-        let count = sessionCounts[label, default: 0] + 1
-        let filename = "session_\(timestamp)_\(String(format: "%03d", count)).csv"
+        let currentCount = sessionCountsBySource[source]?[label, default: 0] ?? 0
+        let count = currentCount + 1
+        let filename = "session_\(sessionStem)_\(String(format: "%03d", count)).csv"
         let fileURL = directory.appendingPathComponent(filename)
 
         var csv = "timestamp,accX,accY,accZ,rotX,rotY,rotZ\n"
@@ -105,12 +147,15 @@ class DataCollectionViewModel {
         }
 
         try? csv.write(to: fileURL, atomically: true, encoding: .utf8)
-        sessionCounts[label] = count
+        var sourceCounts = sessionCountsBySource[source] ?? [:]
+        sourceCounts[label] = count
+        sessionCountsBySource[source] = sourceCounts
+        return count
     }
 
-    private func trainingDataDirectory(for label: DataCollectionLabel) -> URL {
+    private func trainingDataDirectory(for label: DataCollectionLabel, source: DataCollectionSource) -> URL {
         let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-        return documents.appendingPathComponent("TrainingData/\(label.rawValue)")
+        return documents.appendingPathComponent("TrainingData/\(source.directoryName)/\(label.rawValue)")
     }
 
     private var trainingDataRoot: URL {
@@ -119,38 +164,111 @@ class DataCollectionViewModel {
     }
 
     private func loadSessionCounts() {
-        for label in DataCollectionLabel.allCases {
-            let directory = trainingDataDirectory(for: label)
-            let files = (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
-            sessionCounts[label] = files.filter { $0.pathExtension == "csv" }.count
+        for source in DataCollectionSource.physicalSources {
+            var sourceCounts: [DataCollectionLabel: Int] = [:]
+            for label in DataCollectionLabel.allCases {
+                let directory = trainingDataDirectory(for: label, source: source)
+                let files = (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
+                sourceCounts[label] = files.filter { $0.pathExtension == "csv" }.count
+            }
+            sessionCountsBySource[source] = sourceCounts
         }
     }
 
     var totalSessions: Int {
-        sessionCounts.values.reduce(0, +)
+        DataCollectionSource.physicalSources.reduce(0) { partial, source in
+            partial + (sessionCountsBySource[source]?.values.reduce(0, +) ?? 0)
+        }
+    }
+
+    var canRecord: Bool {
+        switch selectedSource {
+        case .leftWatch:
+            return sessionManager.isWatchReachable
+        case .rightGlove:
+            return gloveManager.isGloveConnected
+        case .both:
+            return sessionManager.isWatchReachable && gloveManager.isGloveConnected
+        }
+    }
+
+    var recordingSampleCount: Int {
+        switch selectedSource {
+        case .leftWatch:
+            return watchRecordingBuffer.count
+        case .rightGlove:
+            return gloveRecordingBuffer.count
+        case .both:
+            return watchRecordingBuffer.count + gloveRecordingBuffer.count
+        }
+    }
+
+    var unavailableStatus: String {
+        switch selectedSource {
+        case .leftWatch:
+            return "Left (Watch) not connected"
+        case .rightGlove:
+            return "Right (Smart Glove) not connected"
+        case .both:
+            return "Both Watch and Smart Glove must be connected"
+        }
+    }
+
+    func sessionCount(for label: DataCollectionLabel, source: DataCollectionSource) -> Int {
+        sessionCountsBySource[source]?[label, default: 0] ?? 0
+    }
+
+    func sessionCountText(for label: DataCollectionLabel) -> String {
+        switch selectedSource {
+        case .leftWatch:
+            return "\(sessionCount(for: label, source: .leftWatch))"
+        case .rightGlove:
+            return "\(sessionCount(for: label, source: .rightGlove))"
+        case .both:
+            let left = sessionCount(for: label, source: .leftWatch)
+            let right = sessionCount(for: label, source: .rightGlove)
+            return "L\(left) / R\(right)"
+        }
+    }
+
+    func progressCount(for label: DataCollectionLabel) -> Int {
+        switch selectedSource {
+        case .leftWatch:
+            return sessionCount(for: label, source: .leftWatch)
+        case .rightGlove:
+            return sessionCount(for: label, source: .rightGlove)
+        case .both:
+            // Use the smaller side as progress when collecting both-hand datasets.
+            return min(
+                sessionCount(for: label, source: .leftWatch),
+                sessionCount(for: label, source: .rightGlove)
+            )
+        }
     }
 
     // MARK: - Export
 
-    /// Creates a consolidated CSV with all sessions for Create ML training.
-    /// Format: sessionId, label, timestamp, accX, accY, accZ, rotX, rotY, rotZ
+    /// Creates a consolidated CSV for separate-hand model training.
+    /// Format: sessionId,label,handSource,timestamp,accX,accY,accZ,rotX,rotY,rotZ
     func exportTrainingData() -> URL? {
         let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-        let exportURL = documents.appendingPathComponent("BoxedUp_TrainingData.csv")
+        let exportURL = documents.appendingPathComponent("BoxedUp_TrainingData_SeparateHands.csv")
 
-        var csv = "sessionId,label,timestamp,accX,accY,accZ,rotX,rotY,rotZ\n"
+        var csv = "sessionId,label,handSource,timestamp,accX,accY,accZ,rotX,rotY,rotZ\n"
 
-        for label in DataCollectionLabel.allCases {
-            let directory = trainingDataDirectory(for: label)
-            guard let files = try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) else { continue }
+        for source in DataCollectionSource.physicalSources {
+            for label in DataCollectionLabel.allCases {
+                let directory = trainingDataDirectory(for: label, source: source)
+                guard let files = try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) else { continue }
 
-            for file in files.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) where file.pathExtension == "csv" {
-                let sessionId = file.deletingPathExtension().lastPathComponent
-                guard let content = try? String(contentsOf: file, encoding: .utf8) else { continue }
+                for file in files.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) where file.pathExtension == "csv" {
+                    let sessionId = file.deletingPathExtension().lastPathComponent
+                    guard let content = try? String(contentsOf: file, encoding: .utf8) else { continue }
 
-                let lines = content.components(separatedBy: "\n").dropFirst() // skip header
-                for line in lines where !line.trimmingCharacters(in: .whitespaces).isEmpty {
-                    csv += "\(sessionId),\(label.rawValue),\(line)\n"
+                    let lines = content.components(separatedBy: "\n").dropFirst()
+                    for line in lines where !line.trimmingCharacters(in: .whitespaces).isEmpty {
+                        csv += "\(sessionId),\(label.rawValue),\(source.rawValue),\(line)\n"
+                    }
                 }
             }
         }
@@ -161,8 +279,12 @@ class DataCollectionViewModel {
 
     func deleteAllData() {
         try? FileManager.default.removeItem(at: trainingDataRoot)
-        for label in DataCollectionLabel.allCases {
-            sessionCounts[label] = 0
+        for source in DataCollectionSource.physicalSources {
+            var sourceCounts: [DataCollectionLabel: Int] = [:]
+            for label in DataCollectionLabel.allCases {
+                sourceCounts[label] = 0
+            }
+            sessionCountsBySource[source] = sourceCounts
         }
         statusMessage = "All training data deleted"
     }
@@ -173,10 +295,30 @@ class DataCollectionViewModel {
         sessionManager.onMotionData = { [weak self] samples in
             guard let self else { return }
             Task { @MainActor in
-                if self.isRecording {
-                    self.recordingBuffer.append(contentsOf: samples)
+                if self.isRecording && self.selectedSource.includesWatch {
+                    self.watchRecordingBuffer.append(contentsOf: samples)
                 }
             }
         }
+
+        gloveManager.onMotionData = { [weak self] samples in
+            guard let self else { return }
+            Task { @MainActor in
+                if self.isRecording && self.selectedSource.includesGlove {
+                    self.gloveRecordingBuffer.append(contentsOf: samples)
+                }
+            }
+        }
+    }
+
+    func teardownMotionCallbacks() {
+        sessionManager.onMotionData = nil
+        gloveManager.onMotionData = nil
+    }
+
+    private static func timestampString(from date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyyMMdd_HHmmss"
+        return formatter.string(from: date)
     }
 }

@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-/// iPhone UI for recording labeled training data sessions from Apple Watch motion.
+/// iPhone UI for recording labeled training data sessions from Watch and Smart Glove motion.
 struct DataCollectionView: View {
     @Bindable var viewModel: DataCollectionViewModel
     var onDone: () -> Void
@@ -21,6 +21,7 @@ struct DataCollectionView: View {
             ScrollView {
                 VStack(spacing: 24) {
                     labelPicker
+                    sourcePicker
                     sessionCountsGrid
                     recordingArea
                     statusBar
@@ -90,9 +91,9 @@ struct DataCollectionView: View {
                             .foregroundStyle(label == viewModel.selectedLabel ? .blue : .secondary)
                         Text(label.displayName)
                             .font(.caption2)
-                        Text("\(viewModel.sessionCounts[label, default: 0])")
+                        Text(viewModel.sessionCountText(for: label))
                             .font(.title3.bold())
-                            .foregroundStyle(countColor(for: viewModel.sessionCounts[label, default: 0]))
+                            .foregroundStyle(countColor(for: viewModel.progressCount(for: label)))
                     }
                     .padding(8)
                     .background(label == viewModel.selectedLabel ? Color.blue.opacity(0.1) : Color.clear)
@@ -103,6 +104,28 @@ struct DataCollectionView: View {
             Text("Recommended: 50+ sessions per type")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
+        }
+    }
+
+    // MARK: - Source Picker
+
+    private var sourcePicker: some View {
+        VStack(spacing: 12) {
+            Text("Collection Source")
+                .font(.headline)
+
+            Picker("Source", selection: $viewModel.selectedSource) {
+                ForEach(DataCollectionSource.allCases, id: \.self) { source in
+                    Text(source.displayName).tag(source)
+                }
+            }
+            .pickerStyle(.menu)
+            .disabled(viewModel.isRecording || viewModel.countdown != nil)
+
+            Text("Smart Glove is fixed on RIGHT hand. Watch data is stored as LEFT hand.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
         }
     }
 
@@ -132,7 +155,7 @@ struct DataCollectionView: View {
                         .font(.title2.bold())
                         .foregroundStyle(.red)
 
-                    Text("\(viewModel.recordingBuffer.count) samples")
+                    Text("\(viewModel.recordingSampleCount) samples")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
 
@@ -157,7 +180,7 @@ struct DataCollectionView: View {
                     .foregroundStyle(.red)
                     .clipShape(RoundedRectangle(cornerRadius: 16))
                 }
-                .disabled(!viewModel.sessionManager.isWatchReachable)
+                .disabled(!viewModel.canRecord)
             }
         }
     }
@@ -175,9 +198,31 @@ struct DataCollectionView: View {
                 Image(systemName: viewModel.sessionManager.isWatchReachable
                       ? "applewatch.radiowaves.left.and.right" : "applewatch.slash")
                     .foregroundStyle(viewModel.sessionManager.isWatchReachable ? .green : .red)
-                Text(viewModel.sessionManager.isWatchReachable ? "Watch Connected" : "Watch Not Connected")
+                Text(viewModel.sessionManager.isWatchReachable ? "Left Watch Connected" : "Left Watch Not Connected")
                     .font(.caption)
                     .foregroundStyle(viewModel.sessionManager.isWatchReachable ? .green : .red)
+            }
+
+            HStack {
+                Image(systemName: viewModel.gloveManager.isGloveConnected
+                      ? "hand.raised.fingers.spread.fill" : "hand.raised.slash.fill")
+                    .foregroundStyle(viewModel.gloveManager.isGloveConnected ? .green : .red)
+                Text(viewModel.gloveManager.isGloveConnected ? "Right Smart Glove Connected" : "Right Smart Glove Not Connected")
+                    .font(.caption)
+                    .foregroundStyle(viewModel.gloveManager.isGloveConnected ? .green : .red)
+            }
+
+            if !viewModel.gloveManager.isGloveConnected {
+                Button {
+                    if viewModel.gloveManager.isScanning {
+                        viewModel.gloveManager.stopScanning()
+                    } else {
+                        viewModel.gloveManager.startScanning()
+                    }
+                } label: {
+                    Label(viewModel.gloveManager.isScanning ? "Scanning Smart Glove..." : "Connect Smart Glove", systemImage: "dot.radiowaves.left.and.right")
+                        .font(.caption)
+                }
             }
         }
     }

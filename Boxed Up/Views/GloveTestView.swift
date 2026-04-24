@@ -10,7 +10,7 @@ import SwiftUI
 /// Test view for verifying ESP32 Smart Glove BLE connection and MPU6050 motion data.
 /// Shows real-time 6-axis IMU values, sample rate, and acceleration magnitude.
 struct GloveTestView: View {
-    @State var gloveManager = GloveSessionManager()
+    @Bindable var gloveManager: GloveSessionManager
     var onDone: () -> Void
 
     // MARK: - Live Data State

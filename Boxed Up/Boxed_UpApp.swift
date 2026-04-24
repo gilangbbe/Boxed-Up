@@ -10,6 +10,7 @@ import SwiftUI
 @main
 struct Boxed_UpApp: App {
     @State private var sessionManager = PhoneSessionManager()
+    @State private var gloveManager = GloveSessionManager()
     @State private var viewModel: SparringViewModel?
     @State private var dataCollectionViewModel: DataCollectionViewModel?
     @State private var isDataCollectionMode = false
@@ -19,7 +20,7 @@ struct Boxed_UpApp: App {
         WindowGroup {
             if let viewModel {
                 if isGloveTestMode {
-                    GloveTestView(onDone: { isGloveTestMode = false })
+                    GloveTestView(gloveManager: gloveManager, onDone: { isGloveTestMode = false })
                 } else if isDataCollectionMode, let dcViewModel = dataCollectionViewModel {
                     DataCollectionView(viewModel: dcViewModel, onDone: exitDataCollection)
                 } else {
@@ -43,7 +44,8 @@ struct Boxed_UpApp: App {
     }
 
     private func enterDataCollection() {
-        let dcViewModel = DataCollectionViewModel(sessionManager: sessionManager)
+        gloveManager.startScanning()
+        let dcViewModel = DataCollectionViewModel(sessionManager: sessionManager, gloveManager: gloveManager)
         dataCollectionViewModel = dcViewModel
         isDataCollectionMode = true
         sessionManager.send(.enterDataCollection)
@@ -52,6 +54,8 @@ struct Boxed_UpApp: App {
     private func exitDataCollection() {
         isDataCollectionMode = false
         sessionManager.send(.exitDataCollection)
+        dataCollectionViewModel?.teardownMotionCallbacks()
+        gloveManager.stopCapture()
         viewModel?.setupMotionCallback()
         dataCollectionViewModel = nil
     }

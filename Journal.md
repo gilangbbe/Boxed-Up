@@ -897,6 +897,90 @@ If **Test 7 gravity ≈ 0**: sensor registers respond but IMU core is non-functi
 |------|---------|
 | `ESPFirmware/SensorDiagnostic.ino` | Standalone MPU6050 hardware diagnostic sketch |
 
+## Entry 13 — Phase 8.6 Data Collection (Option A: Separate Models Per Hand)
+
+**Date:** 2026-04-23  
+**Phase:** 8.6 — Dual-Source Data Collection
+
+### Context
+
+Hardware is complete and stable. Smart Glove is now the permanent **right-hand** sensor, and data collection must support Option A (separate models per hand). The app previously recorded Watch-only samples in a single folder, which was not enough for left/right separated training.
+
+### What Was Implemented
+
+1. Added a new source model: `DataCollectionSource` with:
+   - `leftWatch`
+   - `rightGlove`
+   - `both`
+
+2. Upgraded `DataCollectionViewModel` to support dual-source capture:
+   - Injects both `PhoneSessionManager` and `GloveSessionManager`
+   - New `selectedSource` state for source selection
+   - Separate in-memory recording buffers for Watch and Glove
+   - Source-aware start/stop capture:
+     - Watch via `WatchMessage.startCapture/stopCapture`
+     - Glove via BLE write commands
+   - Source-aware connection gating (`canRecord`) and status messages
+   - Proper callback lifecycle with `setupMotionCallback()` / `teardownMotionCallbacks()`
+
+3. Implemented per-hand storage layout for Option A:
+
+```
+Documents/TrainingData/
+├── left_watch/
+│   ├── jab/
+│   ├── hook/
+│   ├── uppercut/
+│   └── other/
+└── right_glove/
+    ├── jab/
+    ├── hook/
+    ├── uppercut/
+    └── other/
+```
+
+4. Updated export format for separate-hand training:
+   - Output file: `BoxedUp_TrainingData_SeparateHands.csv`
+   - Added `handSource` column to each row
+   - Header: `sessionId,label,handSource,timestamp,accX,accY,accZ,rotX,rotY,rotZ`
+
+5. Updated data collection UI:
+   - Added collection-source picker (`Left Watch`, `Right Smart Glove`, `Both Hands`)
+   - Added explicit note that Smart Glove is fixed on right hand
+   - Session grid now shows per-source counts
+   - Recording sample counter reflects selected source(s)
+   - Status area now shows both Watch and Glove connection states
+   - Added Smart Glove connect/scan button directly in data collection view
+
+6. App-level integration updates:
+   - Promoted `GloveSessionManager` to app-level state in `Boxed_UpApp`
+   - Injected shared glove manager into `GloveTestView` and `DataCollectionViewModel`
+   - Data collection entry now starts glove scanning automatically
+   - Data collection exit now clears motion callbacks and stops glove capture
+
+### Files Added
+
+| File | Purpose |
+|------|---------|
+| `Shared/Models/DataCollectionSource.swift` | Source selection model for left Watch / right Glove / both |
+
+### Files Updated
+
+| File | Change |
+|------|--------|
+| `Boxed Up/ViewModels/DataCollectionViewModel.swift` | Dual-source capture, per-hand storage/export, source-aware state and callbacks |
+| `Boxed Up/Views/DataCollectionView.swift` | Source picker, dual connection UI, source-aware session counts and recording controls |
+| `Boxed Up/Views/GloveTestView.swift` | Uses injected app-level glove manager (`@Bindable`) |
+| `Boxed Up/Boxed_UpApp.swift` | App-level glove manager + injection into data collection and glove test flows |
+
+### Outcome
+
+The app now supports collection for Option A exactly as requested:
+- **Right hand = Smart Glove dataset**
+- **Left hand = Watch dataset**
+- Independent per-hand files for training separate CNN models
+- Optional simultaneous collection for synchronization and combo experiments
+
 ---
 
 *End of journal. Update this file after every implementation session.*
