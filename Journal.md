@@ -1108,7 +1108,50 @@ The detection threshold for the right-hand (glove) path was lowered to **0.6** (
 
 iOS target builds successfully.
 
+---
+
+## Entry 20 — Fix: Combo Mode Instant False Detections (Proper Pipeline Fix)
+
+**Date:** 2026-04-24
+
+### Entry 19 Rolled Back
+
+Entry 19's `inferenceEpoch` approach was reverted. The epoch guard prevented stale *tasks* but did not fix the root structural problem and the bug remained.
+
+### Root Cause — Missing `captureWindow()` Guard
+
+The combo and single-hand pipelines were architecturally different in a critical way:
+
+| | Single-hand `processPunch()` | Combo `processComboStep(from:hand:)` |
+|---|---|---|
+| Gets samples | Calls `motionBuffer.captureWindow()` internally | Received `allSamples` snapshot at detection time |
+| Buffer requirement | Requires ≥50 samples (returns nil early if not enough) | No minimum — fires on as few as 5 samples |
+| `isWaitingForPunch = false` | Only set after all guards pass, including captureWindow | Set immediately at top of function |
+
+When the ML detector fires (it only needs 25 samples), the combo callback passed `allSamples` directly to `processComboStep`. With only ~5–25 samples, the classifier received far too little data. More importantly, `isWaitingForPunch = false` was set before the `captureWindow()` check — so with a short buffer the guard would always pass, and the stale batch data from the previous punch's recovery motion would immediately retrigger on the next step.
+
+### Fix — Mirror the Single-Hand Pipeline
+
+Changed `processComboStep` to match `processPunch()` exactly:
+
+1. **Removed `from samples` parameter** — `processComboStep(hand:)` now selects the correct buffer (`motionBuffer` for `.left`, `gloveBuffer` for `.right`) and calls `buffer.captureWindow()` internally
+2. **`captureWindow()` acts as the natural debounce** — returns `nil` until ≥50 samples are buffered; the function returns early with no side-effects, and the motion callback retries on the next batch
+3. **`isWaitingForPunch = false` only set after captureWindow succeeds** — exactly like `processPunch()`
+4. Updated all four call sites in `setupMotionCallback()` and `setupGloveCallback()` to not pass samples
+
+**Why this works:** The detector fires repeatedly as new batches arrive. Each call to `processComboStep` simply returns nil until 50 samples are in the buffer. The first call that succeeds sets `isWaitingForPunch = false`, blocking all subsequent calls. No epoch counter needed.
+
+### Files Modified
+
+| File | Change |
+|------|--------|
+| `Boxed Up/ViewModels/SparringViewModel.swift` | Removed `inferenceEpoch`. Rewrote `processComboStep(from:hand:)` → `processComboStep(hand:)` with internal `captureWindow()` guard. Updated all 4 call sites. |
+
 *End of journal. Update this file after every implementation session.*
+
+**Date:** 2026-04-24
+
+~~**Rolled back in Entry 20.** The epoch approach prevented stale tasks but did not address the structural root cause. See Entry 20 for the real fix.~~
 
 ---
 

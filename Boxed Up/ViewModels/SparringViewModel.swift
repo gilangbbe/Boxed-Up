@@ -209,9 +209,16 @@ class SparringViewModel {
 
     // MARK: - Combo Step Processing
 
-    private func processComboStep(from samples: [MotionSample], hand: HandSide) {
+    /// Mirrors processPunch() / processGlovePunch(): pulls a full 50-sample window
+    /// from the correct buffer via captureWindow(). Returns nil (no side-effects)
+    /// if fewer than 50 samples are available yet, so the motion callback will
+    /// retry naturally on the next batch until the window is full.
+    private func processComboStep(hand: HandSide) {
         guard isWaitingForPunch else { return }
         guard let step = comboManager.currentStep, step.hand == hand else { return }
+
+        let buffer = hand == .left ? motionBuffer : gloveBuffer
+        guard let samples = buffer.captureWindow() else { return }
 
         let reactionTime = comboStepStartTime.map { Date().timeIntervalSince($0) }
                         ?? roundManager.config.effectiveReactionWindow
@@ -343,7 +350,7 @@ class SparringViewModel {
                         if detection.isPunch && detection.confidence > 0.9 {
                             Task { @MainActor in
                                 if self.gameMode == .combo {
-                                    self.processComboStep(from: allSamples, hand: .left)
+                                    self.processComboStep(hand: .left)
                                 } else {
                                     self.processPunch()
                                 }
@@ -354,7 +361,7 @@ class SparringViewModel {
                     // Fallback: threshold-based detection
                     if self.motionBuffer.checkForPunch() {
                         if self.gameMode == .combo {
-                            self.processComboStep(from: self.motionBuffer.allSamples, hand: .left)
+                            self.processComboStep(hand: .left)
                         } else {
                             self.processPunch()
                         }
@@ -399,13 +406,13 @@ class SparringViewModel {
                             let detection = classifier.detectPunch(from: allSamples, hand: .right)
                             if detection.isPunch && detection.confidence > 0.9 {
                                 Task { @MainActor in
-                                    self.processComboStep(from: allSamples, hand: .right)
+                                    self.processComboStep(hand: .right)
                                 }
                             }
                         }
                     } else {
                         if self.gloveBuffer.checkForPunch() {
-                            self.processComboStep(from: self.gloveBuffer.allSamples, hand: .right)
+                            self.processComboStep(hand: .right)
                         }
                     }
 
