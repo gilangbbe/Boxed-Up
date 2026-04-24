@@ -37,7 +37,7 @@ struct Boxed_UpApp: App {
                 ProgressView("Connecting…")
                     .onAppear {
                         sessionManager.activate()
-                        viewModel = SparringViewModel(sessionManager: sessionManager)
+                        viewModel = SparringViewModel(sessionManager: sessionManager, gloveManager: gloveManager)
                     }
             }
         }

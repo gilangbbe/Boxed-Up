@@ -29,20 +29,56 @@ struct SparringView: View {
             Spacer()
 
             // Current action display
-            if let punch = viewModel.roundManager.currentAction {
-                VStack(spacing: 16) {
-                    Image(systemName: "figure.boxing")
-                        .font(.system(size: 60))
-                        .foregroundStyle(.red)
+            if viewModel.gameMode == .combo {
+                // -- Combo mode --
+                if !viewModel.comboManager.currentCombo.isEmpty {
+                    VStack(spacing: 20) {
+                        // Full combo sequence with step status
+                        ComboProgressView(
+                            combo: viewModel.comboManager.currentCombo,
+                            currentStepIndex: viewModel.comboManager.currentStepIndex,
+                            stepResults: viewModel.comboStepResults
+                        )
 
-                    Text(punch.rawValue.uppercased())
-                        .font(.largeTitle.bold())
-                        .foregroundStyle(.red)
+                        // Large current step indicator
+                        if let step = viewModel.comboManager.currentStep {
+                            HStack(spacing: 12) {
+                                Text(step.hand == .left ? "LEFT" : "RIGHT")
+                                    .font(.headline.bold())
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 7)
+                                    .background(step.hand == .left ? Color.blue : Color.red)
+                                    .clipShape(Capsule())
+
+                                Text(step.punch.rawValue.uppercased())
+                                    .font(.largeTitle.bold())
+                                    .foregroundStyle(step.hand == .left ? .blue : .red)
+                            }
+                            .transition(.scale.combined(with: .opacity))
+                            .animation(.easeInOut(duration: 0.2), value: viewModel.comboManager.currentStepIndex)
+                        }
+                    }
                 }
-                .transition(.scale.combined(with: .opacity))
-                .animation(.easeInOut(duration: 0.3), value: viewModel.roundManager.currentActionIndex)
+            } else {
+                // -- Single hand mode --
+                if let punch = viewModel.roundManager.currentAction {
+                    VStack(spacing: 16) {
+                        Image(systemName: "figure.boxing")
+                            .font(.system(size: 60))
+                            .foregroundStyle(.red)
 
-                // Reaction time countdown bar
+                        Text(punch.rawValue.uppercased())
+                            .font(.largeTitle.bold())
+                            .foregroundStyle(.red)
+                    }
+                    .transition(.scale.combined(with: .opacity))
+                    .animation(.easeInOut(duration: 0.3), value: viewModel.roundManager.currentActionIndex)
+                }
+            }
+
+            // Reaction timer bar (shared across modes)
+            if viewModel.isWaitingForPunch {
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
                         RoundedRectangle(cornerRadius: 4)
@@ -97,9 +133,15 @@ struct SparringView: View {
             Spacer()
 
             // Round progress
-            Text("Action \(viewModel.roundManager.currentActionIndex + 1) of \(viewModel.roundManager.config.actionsPerRound)")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            if viewModel.gameMode == .combo {
+                Text("Combo \(viewModel.comboNumber) of \(viewModel.totalCombos)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                Text("Action \(viewModel.roundManager.currentActionIndex + 1) of \(viewModel.roundManager.config.actionsPerRound)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
         .padding()
         .overlay {
@@ -155,5 +197,73 @@ struct SparringView: View {
         if remaining > 0.5 { return .green }
         if remaining > 0.25 { return .yellow }
         return .red
+    }
+}
+
+// MARK: - Combo Progress View
+
+private struct ComboProgressView: View {
+    let combo: [ComboAction]
+    let currentStepIndex: Int
+    let stepResults: [Bool?]
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(Array(combo.enumerated()), id: \.offset) { index, action in
+                stepView(for: action, at: index)
+
+                if index < combo.count - 1 {
+                    Image(systemName: "arrow.right")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 4)
+                }
+            }
+        }
+        .padding(.horizontal)
+    }
+
+    @ViewBuilder
+    private func stepView(for action: ComboAction, at index: Int) -> some View {
+        let result = index < stepResults.count ? stepResults[index] : nil
+        let isCurrent = index == currentStepIndex
+
+        VStack(spacing: 6) {
+            // Hand badge
+            Text(action.hand == .left ? "L" : "R")
+                .font(.caption2.bold())
+                .foregroundStyle(.white)
+                .frame(width: 22, height: 22)
+                .background(action.hand == .left ? Color.blue : Color.red)
+                .clipShape(Circle())
+
+            // Punch type
+            Text(action.punch.rawValue.uppercased())
+                .font(.caption.bold())
+                .foregroundStyle(isCurrent ? .primary : .secondary)
+
+            // Status dot / result icon
+            if let r = result {
+                Image(systemName: r ? "checkmark" : "xmark")
+                    .font(.caption2.bold())
+                    .foregroundStyle(r ? .green : .red)
+            } else {
+                Circle()
+                    .fill(isCurrent ? Color.orange : Color.clear)
+                    .frame(width: 5, height: 5)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 8)
+        .background(stepBackground(result: result, isCurrent: isCurrent))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
+    private func stepBackground(result: Bool?, isCurrent: Bool) -> Color {
+        if let r = result {
+            return (r ? Color.green : Color.red).opacity(0.1)
+        }
+        if isCurrent { return Color.orange.opacity(0.15) }
+        return Color.gray.opacity(0.08)
     }
 }

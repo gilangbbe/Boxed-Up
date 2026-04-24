@@ -12,6 +12,17 @@ struct HomeView: View {
     var onCollectData: () -> Void
     var onTestGlove: () -> Void
 
+    private var canStartRound: Bool {
+        switch viewModel.gameMode {
+        case .singleHand:
+            return viewModel.sessionManager.isWatchReachable
+        case .glove:
+            return viewModel.gloveManager.isGloveConnected
+        case .combo:
+            return viewModel.sessionManager.isWatchReachable && viewModel.gloveManager.isGloveConnected
+        }
+    }
+
     var body: some View {
         VStack(spacing: 30) {
             Spacer()
@@ -29,13 +40,50 @@ struct HomeView: View {
 
             Spacer()
 
-            // Watch connection status
-            HStack {
-                Image(systemName: viewModel.sessionManager.isWatchReachable ? "applewatch.radiowaves.left.and.right" : "applewatch.slash")
-                    .foregroundStyle(viewModel.sessionManager.isWatchReachable ? .green : .red)
-                Text(viewModel.sessionManager.isWatchReachable ? "Watch Connected" : "Watch Not Connected")
+            // Connection status
+            VStack(spacing: 6) {
+                if viewModel.gameMode != .glove {
+                    HStack {
+                        Image(systemName: viewModel.sessionManager.isWatchReachable
+                              ? "applewatch.radiowaves.left.and.right" : "applewatch.slash")
+                            .foregroundStyle(viewModel.sessionManager.isWatchReachable ? .green : .red)
+                        Text(viewModel.sessionManager.isWatchReachable ? "Watch Connected" : "Watch Not Connected")
+                            .font(.subheadline)
+                            .foregroundStyle(viewModel.sessionManager.isWatchReachable ? .green : .red)
+                    }
+                }
+                if viewModel.gameMode == .combo || viewModel.gameMode == .glove {
+                    HStack {
+                        Image(systemName: viewModel.gloveManager.isGloveConnected
+                              ? "hand.raised.fill" : "hand.raised.slash.fill")
+                            .foregroundStyle(viewModel.gloveManager.isGloveConnected ? .green : .orange)
+                        Text(viewModel.gloveManager.isGloveConnected ? "Glove Connected" : "Glove Not Connected")
+                            .font(.subheadline)
+                            .foregroundStyle(viewModel.gloveManager.isGloveConnected ? .green : .orange)
+                    }
+                }
+            }
+
+            // Game mode selection
+            VStack(spacing: 8) {
+                Text("Game Mode")
                     .font(.subheadline)
-                    .foregroundStyle(viewModel.sessionManager.isWatchReachable ? .green : .red)
+                    .foregroundStyle(.secondary)
+
+                Picker("Game Mode", selection: $viewModel.gameMode) {
+                    ForEach(SparringViewModel.GameMode.allCases, id: \.self) { mode in
+                        Text(mode.rawValue).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+            }
+            .padding(.horizontal)
+            .onChange(of: viewModel.gameMode) { _, newMode in
+                if newMode == .combo || newMode == .glove {
+                    viewModel.startGloveScanning()
+                } else {
+                    viewModel.stopGloveScanning()
+                }
             }
 
             // Difficulty selection
@@ -60,11 +108,11 @@ struct HomeView: View {
                     .font(.title2.bold())
                     .frame(maxWidth: .infinity)
                     .padding()
-                    .background(viewModel.sessionManager.isWatchReachable ? .red : .gray)
+                    .background(canStartRound ? .red : .gray)
                     .foregroundStyle(.white)
                     .clipShape(RoundedRectangle(cornerRadius: 16))
             }
-            .disabled(!viewModel.sessionManager.isWatchReachable)
+            .disabled(!canStartRound)
             .padding(.horizontal)
 
             Button {

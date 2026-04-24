@@ -882,8 +882,8 @@ Phase 8 (Smart Glove) — depends on Phase 7 (working single-hand game)
 | ML model location | iPhone | More processing power than Watch/ESP32; both peripherals send raw data, iPhone classifies |
 | Project structure | Single project, two targets (iOS + watchOS) | Shared code via target membership, simpler dependency management |
 | Game display | iPhone screen | Acts as both sparring partner display and score board — placed on stand facing player |
-| Right hand sensor | Apple Watch on punching wrist | More natural punching (hands free), wrist-mounted for better motion signature |
-| Left hand sensor | DIY ESP32 + MPU6050 smart glove | Low-cost (~$15–25), student-accessible, BLE streaming, same 6-axis data as Watch |
+| Right hand sensor | DIY ESP32 + MPU6050 smart glove | Permanent right-hand sensor choice for this project; BLE streaming into iPhone |
+| Left hand sensor | Apple Watch | Permanent left-hand sensor choice for this project; WCSession streaming into iPhone |
 | Glove IMU | MPU6050 (GY-521) | Cheapest 6-axis IMU, I2C, extensive Arduino library support, matches Watch's 6 channels |
 | Glove MCU | ESP32-WROOM-32 | Built-in BLE, ~$5, Arduino IDE compatible, most popular student IoT board |
 | Motion sampling | 50 Hz on both Watch and Glove | Consistent sampling rate across both hands for model compatibility |
@@ -930,3 +930,36 @@ Phase 8 (Smart Glove) — depends on Phase 7 (working single-hand game)
 | Left vs right hand model differences | Train separate models per hand; collect equal amounts of data for both; validate independently |
 | ESP32 I2C lockup (rare MPU6050 issue) | Add I2C bus recovery in firmware (toggle SCL 9 times); use watchdog timer for auto-reset |
 | Student soldering quality | Start with breadboard prototype; test thoroughly before soldering; use header pins for removable connections |
+
+---
+
+## Current Execution Status (Updated 2026-04-24)
+
+### Done
+
+- Phase 8.1–8.4 hardware path complete: Smart Glove hardware built and stable, BLE link validated.
+- Phase 8.5 iPhone BLE integration complete: `GloveSessionManager`, glove test screen, BLE permissions integrated.
+- Phase 8.6 dual-source collection complete: left Watch / right Glove / both-hand collection modes, separate storage folders, source-aware export.
+- Separate-hand CNN models trained and available in `MLModels/`:
+  - `PunchClassifier_CNN_leftWatch.mlmodel`
+  - `PunchDetector_CNN_leftWatch.mlmodel`
+  - `PunchClassifier_CNN_rightGlove.mlmodel`
+  - `PunchDetector_CNN_rightGlove.mlmodel`
+- Phase 8.7 complete: hand-specific model loading and hand-routed inference APIs added in `PunchClassifierService`. `HandSide.swift` created.
+- Phase 8.8 complete: full dual-hand combo game mode implemented. See below.
+
+### Phase 8.8 Implemented (2026-04-24)
+
+**New files:**
+- `Shared/Models/ComboAction.swift` — `struct ComboAction { hand: HandSide, punch: PunchType }`
+- `Boxed Up/GameLogic/ComboManager.swift` — `@Observable`, 3-step combo generation, step tracking
+
+**Updated files:**
+- `SparringViewModel` — `GameMode` enum, `gloveManager` dependency, `gloveBuffer`, combo state machine (`processComboStep`, `setupGloveCallback`, `advanceCombo`, `startNextComboStep`)
+- `HomeView` — `GameMode` picker (Single Hand / Combo), glove connection status, auto-start glove scanning on mode change
+- `SparringView` — `ComboProgressView` (hand badges + result status per step), branched display per game mode
+- `Boxed_UpApp` — passes `gloveManager` to `SparringViewModel` init
+
+### Phase 8 Fully Complete
+
+All sub-phases 8.1–8.8 implemented. Both targets build successfully.

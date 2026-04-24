@@ -15,23 +15,53 @@ import Foundation
 /// between actions and generalizes better than the CreateML Activity Classifier approach.
 class PunchClassifierService {
 
+    private struct ModelSet {
+        let classifier: MLModel
+        let detector: MLModel
+    }
+
+    private static let leftClassifierName = "PunchClassifier_CNN_leftWatch"
+    private static let leftDetectorName = "PunchDetector_CNN_leftWatch"
+    private static let rightClassifierName = "PunchClassifier_CNN_rightGlove"
+    private static let rightDetectorName = "PunchDetector_CNN_rightGlove"
+    private static let fallbackClassifierName = "PunchClassifier_CNN"
+    private static let fallbackDetectorName = "PunchDetector_CNN"
+
     private let classifierModel: MLModel
     private let detectorModel: MLModel
+    private let modelsByHand: [HandSide: ModelSet]
 
     static let classifierWindowSize = 50  // 1.0s at 50 Hz
     static let detectorWindowSize = 25    // 0.5s at 50 Hz
     private static let channelCount = 6   // accX, accY, accZ, rotX, rotY, rotZ
 
     init?() {
-        guard let classifierURL = Bundle.main.url(forResource: "PunchClassifier_CNN", withExtension: "mlmodelc"),
-              let detectorURL = Bundle.main.url(forResource: "PunchDetector_CNN", withExtension: "mlmodelc") else {
+        guard let fallbackClassifierURL = Bundle.main.url(forResource: Self.fallbackClassifierName, withExtension: "mlmodelc"),
+              let fallbackDetectorURL = Bundle.main.url(forResource: Self.fallbackDetectorName, withExtension: "mlmodelc") else {
             print("[PunchClassifierService] CNN model files not found in bundle")
             return nil
         }
 
         do {
-            classifierModel = try MLModel(contentsOf: classifierURL)
-            detectorModel = try MLModel(contentsOf: detectorURL)
+            classifierModel = try MLModel(contentsOf: fallbackClassifierURL)
+            detectorModel = try MLModel(contentsOf: fallbackDetectorURL)
+
+            var handModels: [HandSide: ModelSet] = [:]
+            handModels[.left] = try Self.loadModelSet(
+                classifierName: Self.leftClassifierName,
+                detectorName: Self.leftDetectorName,
+                fallbackClassifier: classifierModel,
+                fallbackDetector: detectorModel,
+                hand: .left
+            )
+            handModels[.right] = try Self.loadModelSet(
+                classifierName: Self.rightClassifierName,
+                detectorName: Self.rightDetectorName,
+                fallbackClassifier: classifierModel,
+                fallbackDetector: detectorModel,
+                hand: .right
+            )
+            modelsByHand = handModels
         } catch {
             print("[PunchClassifierService] Failed to load models: \(error.localizedDescription)")
             return nil
@@ -42,6 +72,15 @@ class PunchClassifierService {
 
     /// Returns true if the motion window looks like a punch.
     func detectPunch(from samples: [MotionSample]) -> (isPunch: Bool, confidence: Double) {
+        detectPunch(from: samples, using: detectorModel)
+    }
+
+    /// Returns true if the motion window looks like a punch for the specified hand model.
+    func detectPunch(from samples: [MotionSample], hand: HandSide) -> (isPunch: Bool, confidence: Double) {
+        detectPunch(from: samples, using: modelSet(for: hand).detector)
+    }
+
+    private func detectPunch(from samples: [MotionSample], using detector: MLModel) -> (isPunch: Bool, confidence: Double) {
         let windowSize = Self.detectorWindowSize
         guard samples.count >= windowSize else { return (false, 0) }
 
@@ -49,7 +88,7 @@ class PunchClassifierService {
 
         do {
             let input = try buildCNNInput(samples: window, windowSize: windowSize)
-            let output = try detectorModel.prediction(from: input)
+            let output = try detector.prediction(from: input)
 
             let label = output.featureValue(for: "classLabel")?.stringValue ?? "other"
             // Probability dict output name from model: "var_83"
@@ -67,6 +106,15 @@ class PunchClassifierService {
 
     /// Classifies the punch type from a motion window.
     func classifyPunch(from samples: [MotionSample]) -> (punchType: PunchType, confidence: Double) {
+        classifyPunch(from: samples, using: classifierModel)
+    }
+
+    /// Classifies the punch type from a motion window for the specified hand model.
+    func classifyPunch(from samples: [MotionSample], hand: HandSide) -> (punchType: PunchType, confidence: Double) {
+        classifyPunch(from: samples, using: modelSet(for: hand).classifier)
+    }
+
+    private func classifyPunch(from samples: [MotionSample], using classifier: MLModel) -> (punchType: PunchType, confidence: Double) {
         let windowSize = Self.classifierWindowSize
         guard samples.count >= windowSize else {
             return (.jab, 0)
@@ -76,7 +124,7 @@ class PunchClassifierService {
 
         do {
             let input = try buildCNNInput(samples: window, windowSize: windowSize)
-            let output = try classifierModel.prediction(from: input)
+            let output = try classifier.prediction(from: input)
 
             let label = output.featureValue(for: "classLabel")?.stringValue ?? "jab"
             // Probability dict output name from model: "var_84"
@@ -121,5 +169,28 @@ class PunchClassifierService {
         return try MLDictionaryFeatureProvider(dictionary: [
             "motionData": MLFeatureValue(multiArray: motionData)
         ])
+    }
+
+    private func modelSet(for hand: HandSide) -> ModelSet {
+        modelsByHand[hand] ?? ModelSet(classifier: classifierModel, detector: detectorModel)
+    }
+
+    private static func loadModelSet(
+        classifierName: String,
+        detectorName: String,
+        fallbackClassifier: MLModel,
+        fallbackDetector: MLModel,
+        hand: HandSide
+    ) throws -> ModelSet {
+        guard let classifierURL = Bundle.main.url(forResource: classifierName, withExtension: "mlmodelc"),
+              let detectorURL = Bundle.main.url(forResource: detectorName, withExtension: "mlmodelc") else {
+            print("[PunchClassifierService] Hand-specific models for \(hand.rawValue) not found, using fallback CNN models")
+            return ModelSet(classifier: fallbackClassifier, detector: fallbackDetector)
+        }
+
+        return ModelSet(
+            classifier: try MLModel(contentsOf: classifierURL),
+            detector: try MLModel(contentsOf: detectorURL)
+        )
     }
 }
