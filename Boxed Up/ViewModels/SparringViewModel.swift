@@ -131,7 +131,7 @@ class SparringViewModel {
         gamePhase = .results
         comboStepStartTime = nil
 
-        SoundManager.playRoundComplete()
+//        SoundManager.playRoundComplete()
 
         sessionManager.send(.stopCapture)
         sessionManager.send(.roundEnd)
@@ -189,10 +189,7 @@ class SparringViewModel {
         guard isWaitingForPunch, gameMode == .glove else { return }
         guard let expectedPunch = roundManager.currentAction,
               let reactionTime = roundManager.elapsedReactionTime else { return }
-        // Use allSamples — no minimum window requirement so detection isn't blocked
-        // by the classifier's 50-sample window while the punch is already in the buffer
-        let samples = gloveBuffer.allSamples
-        guard !samples.isEmpty else { return }
+        guard let samples = gloveBuffer.captureWindow() else { return }
 
         isWaitingForPunch = false
         timeoutTask?.cancel()
@@ -293,7 +290,7 @@ class SparringViewModel {
         score.recordPunch(correct: false, points: 0, reactionTime: reactionTime, confidence: 0)
         lastPunchResult = nil
         lastPunchCorrect = false
-        SoundManager.playTimeout()
+//        SoundManager.playTimeout()
 
         if gameMode == .combo {
             let stepIndex = comboManager.currentStepIndex
@@ -376,11 +373,21 @@ class SparringViewModel {
 
                 switch self.gameMode {
                 case .glove:
-                    // Use raw threshold: immediate, no window-size timing issues.
-                    // The ML detector requires 25+ samples and by the time we have 50
-                    // for classification the punch motion has already left the window.
-                    if self.gloveBuffer.checkForPunch() {
-                        self.processGlovePunch()
+                    if let classifier = self.classifier {
+                        let allSamples = self.gloveBuffer.allSamples
+                        self.mlQueue.async { [weak self] in
+                            guard let self else { return }
+                            let detection = classifier.detectPunch(from: allSamples, hand: .right)
+                            if detection.isPunch && detection.confidence > 0.6 {
+                                Task { @MainActor in
+                                    self.processGlovePunch()
+                                }
+                            }
+                        }
+                    } else {
+                        if self.gloveBuffer.checkForPunch() {
+                            self.processGlovePunch()
+                        }
                     }
 
                 case .combo:
@@ -529,8 +536,8 @@ class SparringViewModel {
                           confidence: confidence)
         lastPunchResult = result
         lastPunchCorrect = correct
-        SoundManager.playPunchDetected()
-        if correct { SoundManager.playCorrect() } else { SoundManager.playWrong() }
+//        SoundManager.playPunchDetected()
+//        if correct { SoundManager.playCorrect() } else { SoundManager.playWrong() }
     }
 
     private func classifyPunchSingleHand(from samples: [MotionSample]) -> (punchType: PunchType, confidence: Double) {

@@ -1047,21 +1047,15 @@ The ESP32 firmware is idle by default and only begins streaming BLE motion packe
 
 ### Root Cause 2 — Window Timing Mismatch (Secondary)
 
-Even after fixing Root Cause 1, the detection pipeline would have failed due to a window size mismatch:
+~~Even after fixing Root Cause 1, the detection pipeline would have failed due to a window size mismatch. Fix was to switch `.glove` mode to raw threshold detection and use `allSamples` in `processGlovePunch()`.~~
 
-- `setupGloveCallback()` used the **ML detector** (needs ≥25 samples). When it fired, it called `processGlovePunch()`.  
-- `processGlovePunch()` called `gloveBuffer.captureWindow()` which **requires ≥50 samples** (the classifier window). It would return `nil` until enough samples accumulated.  
-- By the time 50 samples arrived (~1 second later), the punch motion had already **scrolled out of the detection window** (detector always takes the last 25 samples). Detection would no longer fire, so `processGlovePunch()` was never called with a valid window.
-
-**Fix:** Two changes:
-1. `setupGloveCallback()` for `.glove` mode now uses **raw threshold detection** (`checkForPunch()`) instead of the ML detector. This fires immediately on any sample with acceleration > 1.5g — no window size requirement.  
-2. `processGlovePunch()` now uses `gloveBuffer.allSamples` directly (any non-empty buffer) instead of requiring `captureWindow()`. The ML classifier will classify from whatever samples are available; if < 50 samples the classifier returns `.jab` with 0 confidence, which falls back to random — acceptable for testing.
+**Rolled back** — Root Cause 2 fix was reverted. The ML detector path (0.6 confidence threshold) and `captureWindow()` in `processGlovePunch()` have been restored to their Entry 16 state.
 
 ### Files Modified
 
 | File | Change |
 |------|--------|
-| `Boxed Up/ViewModels/SparringViewModel.swift` | Added `gloveManager.startCapture()` in `.glove` and `.combo` branches of `startRound()`. Changed glove detection to threshold-only. Removed `captureWindow()` requirement from `processGlovePunch()`. |
+| `Boxed Up/ViewModels/SparringViewModel.swift` | Added `gloveManager.startCapture()` in `.glove` and `.combo` branches of `startRound()`. (Root Cause 2 changes reverted — see Entry 18.) |
 
 ### Build Result
 
@@ -1115,6 +1109,27 @@ The detection threshold for the right-hand (glove) path was lowered to **0.6** (
 iOS target builds successfully.
 
 *End of journal. Update this file after every implementation session.*
+
+---
+
+## Entry 18 — Rollback: Entry 17 Root Cause 2
+
+**Date:** 2026-04-24
+
+Rolled back the Root Cause 2 changes from Entry 17. Root Cause 1 (`startCapture()` missing from `startRound()`) remains in place.
+
+### What Was Reverted
+
+| Location | Before (Entry 17 RC2) | After (restored) |
+|----------|-----------------------|-----------------|
+| `setupGloveCallback()` `.glove` case | `checkForPunch()` raw threshold, no ML | ML detector with 0.6 confidence threshold (as established in Entry 16) |
+| `processGlovePunch()` | `gloveBuffer.allSamples` (no minimum) | `gloveBuffer.captureWindow()` (requires ≥50 samples) |
+
+### Files Modified
+
+| File | Change |
+|------|--------|
+| `Boxed Up/ViewModels/SparringViewModel.swift` | Restored ML detector path in `.glove` branch of `setupGloveCallback()`; restored `captureWindow()` in `processGlovePunch()` |
 
 
 ---
