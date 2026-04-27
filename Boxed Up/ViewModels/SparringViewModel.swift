@@ -372,9 +372,10 @@ class SparringViewModel {
                     let mode = self.gameMode
                     self.mlQueue.async { [weak self] in
                         guard let self else { return }
-                        let detection: (isPunch: Bool, confidence: Double) = mode == .combo
-                            ? classifier.detectPunch(from: allSamples, hand: .left)
-                            : classifier.detectPunch(from: allSamples)
+                        // Always use the hand-specific left-watch model for Watch-based modes;
+                        // the generic fallback was trained on different orientation data.
+                        let detection: (isPunch: Bool, confidence: Double) =
+                            classifier.detectPunch(from: allSamples, hand: .left)
 
                         if detection.isPunch && detection.confidence > 0.6 {
                             Task { @MainActor in
@@ -600,7 +601,8 @@ class SparringViewModel {
     }
 
     private func classifyPunchSingleHand(from samples: [MotionSample]) -> (punchType: PunchType, confidence: Double) {
-        if let classifier { return classifier.classifyPunch(from: samples) }
+        // Use the _leftWatch hand-specific model, not the generic fallback.
+        if let classifier { return classifier.classifyPunch(from: samples, hand: .left) }
         return (PunchType.allCases.randomElement()!, Double.random(in: 0.5...1.0))
     }
 

@@ -1625,3 +1625,68 @@ When the user switched back to Glove mode, `startGloveScanning()` began a fresh 
 
 **Build result:** ✅ No compiler errors
 
+---
+
+## Entry 27 — Bug Fix: Wrong ML Model Used in Single-Hand Watch Mode
+
+### Problem
+
+In **Single Hand** (watch-only) mode, punch classification was noticeably inaccurate. When the watch was worn on the right wrist instead, the model performed significantly better.
+
+### Root Cause
+
+There are two tiers of models in `PunchClassifierService`:
+
+| Tier | Files | Purpose |
+|---|---|---|
+| Hand-specific | `_leftWatch`, `_rightGlove` | Trained per-sensor, per-hand orientation |
+| Generic fallback | `PunchClassifier_CNN`, `PunchDetector_CNN` | Trained on mixed / less-targeted data |
+
+**Combo mode** correctly dispatches to the hand-specific model:
+```swift
+classifier.detectPunch(from: allSamples, hand: .left)   // → _leftWatch ✅
+```
+
+**Single-hand mode** was calling the no-hand-parameter overloads instead:
+```swift
+// Detection:
+classifier.detectPunch(from: allSamples)                // → generic fallback ❌
+// Classification:
+classifier.classifyPunch(from: samples)                 // → generic fallback ❌
+```
+
+The generic fallback models were trained on data that matches a different orientation/handedness from the `_leftWatch` specific models, which is why the model happened to respond better when the watch was moved to the right wrist — the generic fallback was trained on right-wrist-oriented data.
+
+### Fix
+
+Changed both the detection and classification calls in single-hand mode to explicitly pass `hand: .left`, routing to `PunchDetector_CNN_leftWatch` and `PunchClassifier_CNN_leftWatch` — the same models already used for watch-side steps in combo mode.
+
+**`setupMotionCallback()`** — detection:
+```swift
+// Before:
+let detection = mode == .combo
+    ? classifier.detectPunch(from: allSamples, hand: .left)
+    : classifier.detectPunch(from: allSamples)          // ← generic fallback
+
+// After (always use left-watch model for Watch input):
+let detection = classifier.detectPunch(from: allSamples, hand: .left)
+```
+
+**`classifyPunchSingleHand()`** — classification:
+```swift
+// Before:
+return classifier.classifyPunch(from: samples)          // ← generic fallback
+
+// After:
+return classifier.classifyPunch(from: samples, hand: .left)
+```
+
+### Note on Wrist Orientation
+
+Apple Watch's `CMMotionManager.deviceMotion` provides wrist-corrected data (it accounts for the Watch's configured wrist setting in Settings → General → Watch Orientation), so axis values should be consistent as long as the device wrist setting matches the physical wrist used during training. If accuracy is still inconsistent after this fix, re-collecting training data with the watch on the intended wrist with the matching Watch orientation setting will be necessary.
+
+### Files Changed
+- ✅ `Boxed Up/ViewModels/SparringViewModel.swift`
+
+**Build result:** ✅ No compiler errors
+
