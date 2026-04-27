@@ -1523,3 +1523,72 @@ Resetting both buffers and the detector's recurrent state immediately before arm
 
 **Build result:** ✅ BUILD SUCCEEDED
 
+---
+
+## Entry 25 — Feature: Fitness Tracking Dashboard
+
+### Goal
+
+Make Boxed Up feel more like a real fitness app by adding persistent workout tracking — calorie burn, session duration, daily punch count, and streaks — and surfacing these through a dedicated dashboard.
+
+### New Architecture
+
+#### New Model: `Boxed Up/Models/SessionRecord.swift`
+A `Codable`, `Identifiable` struct capturing every completed round:
+- `id`, `date`, `duration` (seconds), `punchCount`, `correctCount`, `points`, `grade`, `gameMode`, `calories`
+
+#### New Model: `Boxed Up/Models/FitnessStore.swift`
+An `@Observable` class that persists session history to `UserDefaults` (JSON) and exposes aggregated stats:
+- **Today**: `todayPunches`, `todayCalories`, `todayDuration`, `todaySessionCount`
+- **Weekly**: `last7Days → [DayStat]` (date, calories, punches, hadSession) for bar chart rendering
+- **Streak**: `currentStreak` — consecutive calendar days with at least one session
+- **All-time**: `totalSessionCount`, `allTimePunches`, `allTimeCalories`, `bestSession`
+- **Calorie formula**: MET-based — `7.8 × userWeightKg × durationHours` (boxing/sparring MET from ACSM; default 70 kg user weight, persisted separately)
+
+### ViewModel Changes (`SparringViewModel.swift`)
+- Added `let fitnessStore: FitnessStore` dependency (injected through init)
+- Added `private var roundStartTime: Date?` — set at `startRound()`, consumed at `endRound()`
+- Added `private(set) var lastRoundDuration: TimeInterval` and `lastRoundCalories: Double` — read by ResultsView
+- `endRound()` computes duration + calories, builds a `SessionRecord`, and calls `fitnessStore.addSession(_:)` before transitioning to `.results` phase
+- Added `private func gradeString(for: Score) -> String` — mirrors ResultsView grade logic
+
+### App Entry Point (`Boxed_UpApp.swift`)
+- Added `@State private var fitnessStore = FitnessStore()`
+- Passed to `SparringViewModel` init so the same store instance is shared across all views
+
+### HomeView Fitness Dashboard (`HomeView.swift`)
+Added a `fitnessSection` between the hero and connection badges — the first thing users see, like a real fitness app home screen:
+
+**TODAY'S ACTIVITY row** — three stat tiles:
+- 🥊 **PUNCHES** — total punches thrown today across all sessions
+- 🔥 **CALORIES** — total kcal estimated today (orange accent)
+- ⏱ **ACTIVE TIME** — total session time today formatted as `m:ss` or `Xh Ym` (blue accent)
+
+**Weekly chart + streak card (side by side)**:
+- `weeklyChartCard` — 7-bar histogram showing daily calorie burn for the last 7 days; red gradient bars for active days, dark gray for rest days; today's label highlighted in red; week total shown in header
+- `streakCard` — large streak number with flame icon (orange), "DAYS" label, plus all-time session count below
+
+All tiles use the established card design (`Color(white: 0.09)` bg, `Color(white: 0.14)` border, `cornerRadius: 14`).
+
+### ResultsView Enhancements (`ResultsView.swift`)
+- Wrapped content in `ScrollView` to accommodate the additional stat rows
+- Added two new `ResultStatRow` entries to the stats card:
+  - **Duration** — round time formatted as `m:ss` (blue accent, `clock.fill` icon)
+  - **Calories Burned** — kcal this round (orange accent, `flame.fill` icon)
+- Added **today's activity strip** below the stats card — a horizontal three-cell row showing cumulative today totals (punches, kcal, active time) with small icons and labels. Updates instantly because `fitnessStore` is `@Observable`.
+
+### Design Notes
+- All fitness UI follows the established dark design system: `Color(white: 0.09)` cards, `Color(white: 0.14)` borders, 8–9pt bold tracking labels, monospacedDigit fonts for numbers
+- Calorie values use `%.0f` formatting (no decimals for clean display)
+- Duration formats as `m:ss` for sub-hour sessions, `Xh Ym` for longer ones
+
+### Files Changed
+- ✅ Created `Boxed Up/Models/SessionRecord.swift`
+- ✅ Created `Boxed Up/Models/FitnessStore.swift`
+- ✅ Modified `Boxed Up/ViewModels/SparringViewModel.swift`
+- ✅ Modified `Boxed Up/Boxed_UpApp.swift`
+- ✅ Modified `Boxed Up/Views/HomeView.swift`
+- ✅ Modified `Boxed Up/Views/ResultsView.swift`
+
+**Build result:** ✅ No compiler errors
+

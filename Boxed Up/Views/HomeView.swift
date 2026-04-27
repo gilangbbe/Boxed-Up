@@ -35,7 +35,8 @@ struct HomeView: View {
             ScrollView(showsIndicators: false) {
                 VStack(spacing: 0) {
                     heroSection
-                    connectionBadges.padding(.top, 28)
+                    fitnessSection.padding(.top, 28)
+                    connectionBadges.padding(.top, 24)
                     modePicker.padding(.top, 32)
                     difficultyPicker.padding(.top, 24)
                     startButton.padding(.top, 32)
@@ -190,6 +191,185 @@ struct HomeView: View {
         }
         .disabled(!canStartRound)
         .animation(.easeInOut(duration: 0.25), value: canStartRound)
+    }
+
+    // MARK: – Fitness Dashboard
+
+    private var fitnessSection: some View {
+        let store = viewModel.fitnessStore
+        return VStack(spacing: 12) {
+            SectionLabel(title: "TODAY'S ACTIVITY", icon: "chart.bar.fill")
+
+            // Three daily stat tiles
+            HStack(spacing: 10) {
+                fitnessStatTile(
+                    icon: "hand.raised.fill",
+                    value: "\(store.todayPunches)",
+                    label: "PUNCHES",
+                    color: Color(red: 1, green: 0.18, blue: 0.13)
+                )
+                fitnessStatTile(
+                    icon: "flame.fill",
+                    value: String(format: "%.0f", store.todayCalories),
+                    unit: "kcal",
+                    label: "CALORIES",
+                    color: Color(red: 1, green: 0.55, blue: 0.12)
+                )
+                fitnessStatTile(
+                    icon: "clock.fill",
+                    value: formatDuration(store.todayDuration),
+                    label: "ACTIVE TIME",
+                    color: Color(red: 0.28, green: 0.60, blue: 1.0)
+                )
+            }
+
+            // Weekly chart + streak side by side
+            HStack(alignment: .top, spacing: 10) {
+                weeklyChartCard
+                streakCard
+            }
+        }
+    }
+
+    private func fitnessStatTile(icon: String, value: String, unit: String = "", label: String, color: Color) -> some View {
+        VStack(spacing: 5) {
+            Image(systemName: icon)
+                .font(.system(size: 13))
+                .foregroundStyle(color)
+            HStack(alignment: .lastTextBaseline, spacing: 2) {
+                Text(value)
+                    .font(.system(size: 22, weight: .black).monospacedDigit())
+                    .foregroundStyle(.white)
+                    .minimumScaleFactor(0.6)
+                if !unit.isEmpty {
+                    Text(unit)
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(Color(white: 0.42))
+                }
+            }
+            Text(label)
+                .font(.system(size: 8, weight: .bold))
+                .tracking(1.5)
+                .foregroundStyle(Color(white: 0.35))
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 14)
+        .background(Color(white: 0.09))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color(white: 0.14), lineWidth: 1))
+    }
+
+    private var weeklyChartCard: some View {
+        let days = viewModel.fitnessStore.last7Days
+        let maxCal = days.map(\.calories).max() ?? 0
+        let weekTotal = viewModel.fitnessStore.weeklyCalories
+
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("THIS WEEK")
+                    .font(.system(size: 9, weight: .bold)).tracking(2)
+                    .foregroundStyle(Color(white: 0.35))
+                Spacer()
+                Text(String(format: "%.0f kcal", weekTotal))
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(Color(white: 0.30))
+            }
+
+            HStack(alignment: .bottom, spacing: 5) {
+                ForEach(days) { day in
+                    let height: CGFloat = maxCal > 0
+                        ? max(4, 42 * CGFloat(day.calories / maxCal))
+                        : 4
+                    VStack(spacing: 4) {
+                        RoundedRectangle(cornerRadius: 3)
+                            .fill(
+                                day.hadSession
+                                    ? AnyShapeStyle(LinearGradient(
+                                        colors: [Color(red: 1, green: 0.18, blue: 0.13),
+                                                 Color(red: 0.82, green: 0.08, blue: 0.04)],
+                                        startPoint: .top, endPoint: .bottom))
+                                    : AnyShapeStyle(Color(white: 0.15))
+                            )
+                            .frame(height: height)
+                        Text(dayInitial(day.date))
+                            .font(.system(size: 8, weight: .semibold))
+                            .foregroundStyle(
+                                Calendar.current.isDateInToday(day.date)
+                                    ? Color.red
+                                    : Color(white: 0.28)
+                            )
+                    }
+                    .frame(maxWidth: .infinity, alignment: .bottom)
+                }
+            }
+            .frame(height: 54)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(white: 0.09))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color(white: 0.14), lineWidth: 1))
+    }
+
+    private var streakCard: some View {
+        let streak = viewModel.fitnessStore.currentStreak
+        let sessions = viewModel.fitnessStore.totalSessionCount
+
+        return VStack(spacing: 4) {
+            Text("STREAK")
+                .font(.system(size: 9, weight: .bold)).tracking(2)
+                .foregroundStyle(Color(white: 0.35))
+
+            Spacer()
+
+            HStack(alignment: .center, spacing: 3) {
+                Text("\(streak)")
+                    .font(.system(size: 34, weight: .black))
+                    .foregroundStyle(streak > 0 ? Color(red: 1, green: 0.55, blue: 0.12) : Color(white: 0.30))
+                if streak > 0 {
+                    Image(systemName: "flame.fill")
+                        .font(.system(size: 18))
+                        .foregroundStyle(Color(red: 1, green: 0.55, blue: 0.12))
+                }
+            }
+            Text("DAYS")
+                .font(.system(size: 8, weight: .bold)).tracking(1.5)
+                .foregroundStyle(Color(white: 0.35))
+
+            Spacer()
+
+            VStack(spacing: 2) {
+                Text("\(sessions)")
+                    .font(.system(size: 17, weight: .black))
+                    .foregroundStyle(.white)
+                Text("SESSIONS")
+                    .font(.system(size: 8, weight: .bold)).tracking(1)
+                    .foregroundStyle(Color(white: 0.30))
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: 100)
+        .frame(maxHeight: .infinity)
+        .background(Color(white: 0.09))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color(white: 0.14), lineWidth: 1))
+    }
+
+    // MARK: – Fitness Helpers
+
+    private func formatDuration(_ interval: TimeInterval) -> String {
+        let total = Int(interval)
+        let h = total / 3600
+        let m = (total % 3600) / 60
+        let s = total % 60
+        if h > 0 { return "\(h)h \(m)m" }
+        return String(format: "%d:%02d", m, s)
+    }
+
+    private func dayInitial(_ date: Date) -> String {
+        let fmt = DateFormatter()
+        fmt.dateFormat = "EEE"
+        return String(fmt.string(from: date).prefix(1))
     }
 
     // MARK: – Utility Row

@@ -34,6 +34,7 @@ class SparringViewModel {
     let comboManager = ComboManager()
     let sessionManager: PhoneSessionManager
     let gloveManager: GloveSessionManager
+    let fitnessStore: FitnessStore
     private let classifier: PunchClassifierService?
     private let mlQueue = DispatchQueue(label: "com.boxedup.ml", qos: .userInitiated)
 
@@ -55,6 +56,12 @@ class SparringViewModel {
     private var comboStepStartTime: Date?
     private var timeoutTask: Task<Void, Never>?
 
+    // MARK: - Fitness Tracking
+
+    private var roundStartTime: Date?
+    private(set) var lastRoundDuration: TimeInterval = 0
+    private(set) var lastRoundCalories: Double = 0
+
     // MARK: - Combo Progress Accessors
 
     var comboNumber: Int { currentComboIndex + 1 }
@@ -62,9 +69,10 @@ class SparringViewModel {
 
     // MARK: - Init
 
-    init(sessionManager: PhoneSessionManager, gloveManager: GloveSessionManager) {
+    init(sessionManager: PhoneSessionManager, gloveManager: GloveSessionManager, fitnessStore: FitnessStore) {
         self.sessionManager = sessionManager
         self.gloveManager = gloveManager
+        self.fitnessStore = fitnessStore
         self.classifier = PunchClassifierService()
         if classifier == nil {
             print("[SparringVM] Warning: ML models not loaded — falling back to random classifier")
@@ -88,6 +96,7 @@ class SparringViewModel {
         gamePhase = .playing
         isWaitingForPunch = true
         reactionTimeRemaining = 1.0
+        roundStartTime = Date()
         motionBuffer.reset()
         gloveBuffer.reset()
         classifier?.resetState()
@@ -127,6 +136,25 @@ class SparringViewModel {
         timeoutTask = nil
         isWaitingForPunch = false
         isShowingComboPreview = false
+
+        // Save fitness record before transitioning to results
+        let duration = roundStartTime.map { Date().timeIntervalSince($0) } ?? 0
+        lastRoundDuration = duration
+        lastRoundCalories = fitnessStore.estimateCalories(duration: duration)
+        roundStartTime = nil
+        let record = SessionRecord(
+            id: UUID(),
+            date: Date(),
+            duration: duration,
+            punchCount: score.totalCount,
+            correctCount: score.correctCount,
+            points: score.totalPoints,
+            grade: gradeString(for: score),
+            gameMode: gameMode.rawValue,
+            calories: lastRoundCalories
+        )
+        fitnessStore.addSession(record)
+
         gamePhase = .results
         comboStepStartTime = nil
 
@@ -577,5 +605,16 @@ class SparringViewModel {
     private func classifyPunch(from samples: [MotionSample], hand: HandSide) -> (punchType: PunchType, confidence: Double) {
         if let classifier { return classifier.classifyPunch(from: samples, hand: hand) }
         return (PunchType.allCases.randomElement()!, Double.random(in: 0.5...1.0))
+    }
+
+    /// Derives the performance grade from a completed Score, mirroring ResultsView logic.
+    private func gradeString(for s: Score) -> String {
+        let a = s.totalCount > 0 ? s.accuracy : 0
+        let t = s.avgReactionTime
+        if a >= 0.9 && t < 0.4 { return "S" }
+        if a >= 0.8             { return "A" }
+        if a >= 0.65            { return "B" }
+        if a >= 0.5             { return "C" }
+        return "D"
     }
 }

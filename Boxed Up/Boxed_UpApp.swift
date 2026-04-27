@@ -11,6 +11,7 @@ import SwiftUI
 struct Boxed_UpApp: App {
     @State private var sessionManager = PhoneSessionManager()
     @State private var gloveManager = GloveSessionManager()
+    @State private var fitnessStore = FitnessStore()
     @State private var viewModel: SparringViewModel?
     @State private var dataCollectionViewModel: DataCollectionViewModel?
     @State private var isDataCollectionMode = false
@@ -37,7 +38,7 @@ struct Boxed_UpApp: App {
                 ProgressView("Connecting…")
                     .onAppear {
                         sessionManager.activate()
-                        viewModel = SparringViewModel(sessionManager: sessionManager, gloveManager: gloveManager)
+                        viewModel = SparringViewModel(sessionManager: sessionManager, gloveManager: gloveManager, fitnessStore: fitnessStore)
                     }
             }
         }
