@@ -376,7 +376,7 @@ class SparringViewModel {
                             ? classifier.detectPunch(from: allSamples, hand: .left)
                             : classifier.detectPunch(from: allSamples)
 
-                        if detection.isPunch && detection.confidence > 0.9 {
+                        if detection.isPunch && detection.confidence > 0.6 {
                             Task { @MainActor in
                                 if self.gameMode == .combo {
                                     self.processComboStep(hand: .left)
@@ -433,7 +433,7 @@ class SparringViewModel {
                         self.mlQueue.async { [weak self] in
                             guard let self else { return }
                             let detection = classifier.detectPunch(from: allSamples, hand: .right)
-                            if detection.isPunch && detection.confidence > 0.9 {
+                            if detection.isPunch && detection.confidence > 0.6 {
                                 Task { @MainActor in
                                     self.processComboStep(hand: .right)
                                 }
