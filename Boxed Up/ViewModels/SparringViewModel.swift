@@ -15,7 +15,7 @@ class SparringViewModel {
     // MARK: - Nested Types
 
     enum GameMode: String, CaseIterable {
-        case singleHand = "Single Hand"
+        case singleHand = "Watch Only"
         case glove = "Glove Only"
         case combo = "Combo"
     }

@@ -40,7 +40,7 @@ struct HomeView: View {
                     modePicker.padding(.top, 32)
                     difficultyPicker.padding(.top, 24)
                     startButton.padding(.top, 32)
-                    utilityRow.padding(.top, 16).padding(.bottom, 48)
+//                    utilityRow.padding(.top, 16).padding(.bottom, 48)
                 }
                 .padding(.horizontal, 22)
             }
@@ -76,7 +76,7 @@ struct HomeView: View {
                     .font(.system(size: 38, weight: .black))
                     .foregroundStyle(.white)
                     .tracking(5)
-                Text("MOTION BOXING TRAINER")
+                Text("MOTION BOXING GAME")
                     .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(Color(white: 0.38))
                     .tracking(3.5)
@@ -274,6 +274,8 @@ struct HomeView: View {
                     .font(.system(size: 9, weight: .semibold))
                     .foregroundStyle(Color(white: 0.30))
             }
+          
+            Spacer()
 
             HStack(alignment: .bottom, spacing: 5) {
                 ForEach(days) { day in
@@ -303,6 +305,8 @@ struct HomeView: View {
                 }
             }
             .frame(height: 54)
+          
+            Spacer()
         }
         .padding(12)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -426,8 +430,8 @@ private struct GameModeCard: View {
 
     private var info: (icon: String, subtitle: String) {
         switch mode {
-        case .singleHand: return ("applewatch",          "Left Watch  •  Reaction training")
-        case .glove:      return ("hand.raised.fill",    "Right Glove  •  Isolated glove mode")
+        case .singleHand: return ("applewatch",          "Left Watch  •  Isolated Left Hand")
+        case .glove:      return ("hand.raised.fill",    "Right Glove  •  Isolated Right Hand")
         case .combo:      return ("hands.sparkles.fill", "Both Hands  •  Combo sequences")
         }
     }
