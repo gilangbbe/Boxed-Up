@@ -40,7 +40,9 @@ class GloveSessionManager: NSObject {
     // MARK: - Public API
 
     /// Start scanning for the BoxedUpGlove BLE peripheral.
+    /// If the glove is already connected, this is a no-op.
     func startScanning() {
+        guard !isGloveConnected else { return }   // already connected — nothing to do
         guard centralManager.state == .poweredOn else {
             print("[Glove] BLE not powered on — state: \(centralManager.state.rawValue)")
             return
@@ -55,7 +57,7 @@ class GloveSessionManager: NSObject {
         print("[Glove] Scanning for BoxedUpGlove...")
     }
 
-    /// Stop scanning and disconnect.
+    /// Stop scanning and disconnect the peripheral entirely.
     func stopScanning() {
         shouldReconnect = false
         centralManager.stopScan()
@@ -63,6 +65,15 @@ class GloveSessionManager: NSObject {
         if let peripheral = glovePeripheral {
             centralManager.cancelPeripheralConnection(peripheral)
         }
+    }
+
+    /// Stop BLE scanning while keeping an existing connection alive.
+    /// Use this when changing game-mode selection so the glove badge stays green.
+    func stopScanningKeepConnection() {
+        shouldReconnect = false
+        centralManager.stopScan()
+        isScanning = false
+        print("[Glove] Scan stopped (connection kept)")
     }
 
     /// Send start capture command to the glove.

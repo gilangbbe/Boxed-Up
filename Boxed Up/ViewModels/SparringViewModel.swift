@@ -84,7 +84,9 @@ class SparringViewModel {
     // MARK: - Glove Scanning
 
     func startGloveScanning() { gloveManager.startScanning() }
-    func stopGloveScanning()  { gloveManager.stopScanning() }
+    /// Stops BLE scanning without dropping an existing connection so the badge
+    /// stays green when the user browses away from glove-enabled modes.
+    func stopGloveScanning()  { gloveManager.stopScanningKeepConnection() }
 
     // MARK: - Game Flow
 

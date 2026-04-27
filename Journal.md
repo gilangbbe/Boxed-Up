@@ -1592,3 +1592,36 @@ All tiles use the established card design (`Color(white: 0.09)` bg, `Color(white
 
 **Build result:** ✅ No compiler errors
 
+---
+
+## Entry 26 — Bug Fix: Glove Connection Badge Disappears After Mode Switch
+
+### Problem
+
+When the glove was connected in **Glove Only** mode, switching to **Single Hand** mode and then back to **Glove Only** caused the connection badge to show "not connected" — even though the glove was physically still powered on. The only way to get the badge back was to toggle the glove off and on to trigger a fresh BLE scan.
+
+### Root Cause
+
+The mode picker in `HomeView` calls `viewModel.stopGloveScanning()` when switching away from any glove-enabled mode. `stopGloveScanning()` delegated directly to `gloveManager.stopScanning()`, which does two things:
+
+1. Stops the BLE scan — correct, needed
+2. Calls `centralManager.cancelPeripheralConnection(peripheral)` — **incorrect for a simple mode-change**, this physically drops the BLE link and sets `isGloveConnected = false`
+
+When the user switched back to Glove mode, `startGloveScanning()` began a fresh scan, but since the connection had been torn down the badge remained gray until the glove was rediscovered and reconnected.
+
+### Fix
+
+**`GloveSessionManager.swift`** — two changes:
+
+1. Added `stopScanningKeepConnection()` — stops the BLE scan and clears `isScanning`/`shouldReconnect` **without** calling `cancelPeripheralConnection`. This preserves any established BLE link.
+
+2. Added an early-exit guard to `startScanning()`: if `isGloveConnected` is already `true`, the function returns immediately (the glove is already paired — no need to scan again).
+
+**`SparringViewModel.swift`** — `stopGloveScanning()` now calls `gloveManager.stopScanningKeepConnection()` instead of `gloveManager.stopScanning()`. The full-disconnect path (`stopScanning()`) is still used when it's actually needed (BLE teardown at end-of-round / data collection exit).
+
+### Files Changed
+- ✅ `Boxed Up/BLERelay/GloveSessionManager.swift`
+- ✅ `Boxed Up/ViewModels/SparringViewModel.swift`
+
+**Build result:** ✅ No compiler errors
+
